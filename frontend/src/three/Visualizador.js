@@ -7,9 +7,22 @@ import { criarModelo } from './modelos/index.js';
 const reduzirMovimento = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const easeOutCubic = (x) => 1 - (1 - x) ** 3;
 
+// Com a barra no máximo, o plano não chega ao fundo: sobra um pedaço do modelo
+const ALCANCE_CORTE = 0.9;
+
+/** Injeta GLSL no material padrão: as faces internas reveladas pelo corte ficam mais escuras. */
+function escurecerFacesInternas(shader) {
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <opaque_fragment>',
+    `#include <opaque_fragment>
+    if (!gl_FrontFacing) gl_FragColor.rgb *= 0.35;`
+  );
+}
+
 /**
  * Visualizador 3D reutilizável: cena, câmera, luzes, controles orbitais,
- * raycasting (hover/clique em partes), animação e limpeza de memória.
+ * raycasting (hover/clique em partes), animação, pausa, aramado, plano de corte
+ * e limpeza de memória.
  */
 export class Visualizador {
   constructor(container, { interativo = true, girarSozinho = true, aoPassar, aoSelecionar } = {}) {
@@ -20,6 +33,12 @@ export class Visualizador {
     this.pivo = null;
     this.parteHover = null;
     this.parteSelecionada = null;
+    this.girarSozinho = girarSozinho;
+    this.pausado = reduzirMovimento;
+    this.aramado = false;
+    this.corte = 0;
+    this.raioModelo = 0;
+    this.planoCorte = new THREE.Plane(new THREE.Vector3(0, 0, -1));
 
     // Renderizador
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -27,6 +46,7 @@ export class Visualizador {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.localClippingEnabled = true;
     container.appendChild(this.renderer.domElement);
 
     // Cena e câmera perspectiva
@@ -50,9 +70,9 @@ export class Visualizador {
 
     // Controles orbitais (girar e aproximar)
     this.controles = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controles.enableDamping = true;
+    this.controles.enableDamping = !this.pausado;
     this.controles.enablePan = false;
-    this.controles.autoRotate = girarSozinho && !reduzirMovimento;
+    this.controles.autoRotate = this.girarSozinho && !this.pausado;
     this.controles.autoRotateSpeed = 0.8;
     this.controles.enableZoom = interativo;
 
@@ -66,9 +86,9 @@ export class Visualizador {
     this.observador.observe(container);
     this.#redimensionar();
 
-    // Laço de animação
-    this.inicio = performance.now();
-    this.ultimoQuadro = this.inicio;
+    // Laço de animação (o tempo acumulado só avança sem pausa, para não saltar ao retomar)
+    this.tempo = 0;
+    this.ultimoQuadro = performance.now();
     this.renderer.setAnimationLoop(() => this.#quadro());
   }
 
@@ -91,6 +111,7 @@ export class Visualizador {
     this.pivo.add(this.modelo.objeto);
     this.cena.add(this.pivo);
     this.#enquadrar(this.modelo.objeto);
+    this.#prepararMateriais();
     this.entrada = reduzirMovimento ? 1 : 0;
   }
 
@@ -98,6 +119,24 @@ export class Visualizador {
   selecionar(chave) {
     this.parteSelecionada = chave;
     this.#aplicarDestaque();
+  }
+
+  /** Congela a animação do modelo e o giro automático; arrastar, aramado e corte continuam funcionando. */
+  pausar(ativo) {
+    this.pausado = ativo;
+    this.controles.autoRotate = this.girarSozinho && !ativo;
+    this.controles.enableDamping = !ativo; // a inércia manteria a câmera deslizando depois da pausa
+  }
+
+  /** Mostra a malha de triângulos do modelo. */
+  definirAramado(ativo) {
+    this.aramado = ativo;
+    this.#paraCadaMaterial((mat) => (mat.wireframe = ativo));
+  }
+
+  /** Avança o plano de corte: 0 = modelo inteiro, 1 = corte máximo. */
+  definirCorte(valor) {
+    this.corte = valor;
   }
 
   destruir() {
@@ -115,7 +154,6 @@ export class Visualizador {
 
   #quadro() {
     const agora = performance.now();
-    const t = (agora - this.inicio) / 1000;
     const dt = Math.min((agora - this.ultimoQuadro) / 1000, 0.1);
     this.ultimoQuadro = agora;
 
@@ -124,11 +162,25 @@ export class Visualizador {
         this.entrada = Math.min(this.entrada + dt / 0.9, 1); // 0,9 s, independente do FPS
         this.pivo.scale.setScalar(0.6 + 0.4 * easeOutCubic(this.entrada));
       }
-      if (!reduzirMovimento) this.modelo.atualizar(t, dt);
+      if (!this.pausado) {
+        this.tempo += dt;
+        this.modelo.atualizar(this.tempo, dt);
+      }
     }
 
     this.controles.update();
+    this.#atualizarPlanoCorte();
     this.renderer.render(this.cena, this.camera);
+  }
+
+  /** Mantém o plano de frente para a câmera; o lado voltado para ela é o que some. */
+  #atualizarPlanoCorte() {
+    const { normal } = this.planoCorte;
+    normal.copy(this.controles.target).sub(this.camera.position).normalize();
+    // sem corte, o plano fica longe do modelo (remover o plano forçaria recompilar os shaders)
+    this.planoCorte.constant = this.corte > 0
+      ? this.raioModelo * (1 - 2 * this.corte * ALCANCE_CORTE)
+      : this.camera.far;
   }
 
   #enquadrar(objeto) {
@@ -139,6 +191,7 @@ export class Visualizador {
 
     // o maior semieixo ocupa ~78% do campo circular
     const raio = Math.max(tamanho.x, tamanho.y, tamanho.z) / 2;
+    this.raioModelo = raio;
     const distancia = raio / Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) / 0.78;
     this.camera.position.set(0, raio * 0.2, distancia);
     this.camera.near = distancia / 100;
@@ -197,7 +250,10 @@ export class Visualizador {
     this.ponteiro.set(((evento.clientX - r.left) / r.width) * 2 - 1, -((evento.clientY - r.top) / r.height) * 2 + 1);
     this.raycaster.setFromCamera(this.ponteiro, this.camera);
 
-    const acertos = this.raycaster.intersectObject(this.pivo, true);
+    // ignora o que o plano de corte removeu da tela
+    const acertos = this.raycaster
+      .intersectObject(this.pivo, true)
+      .filter((a) => this.planoCorte.distanceToPoint(a.point) >= 0);
     // prefere objetos opacos (ex.: brônquios dentro do pulmão semitransparente)
     const acerto = acertos.find((a) => !a.object.material.transparent) ?? acertos[0];
     let alvo = acerto?.object;
@@ -220,6 +276,24 @@ export class Visualizador {
       } else {
         mat.emissiveIntensity = 0;
       }
+    });
+  }
+
+  /** Só materiais padrão: ShaderMaterials (como o halo) ficam fora de corte e aramado, por design. */
+  #paraCadaMaterial(acao) {
+    this.modelo?.objeto.traverse((o) => {
+      if (!o.isMesh) return;
+      [o.material].flat().filter((m) => m.isMeshStandardMaterial).forEach(acao);
+    });
+  }
+
+  #prepararMateriais() {
+    this.#paraCadaMaterial((mat) => {
+      mat.clippingPlanes = [this.planoCorte];
+      mat.side = THREE.DoubleSide; // o corte revela o interior das malhas
+      mat.wireframe = this.aramado;
+      mat.onBeforeCompile = escurecerFacesInternas;
+      mat.needsUpdate = true;
     });
   }
 

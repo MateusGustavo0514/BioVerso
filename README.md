@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # BioVerso
 
 Site informativo de saúde com modelos 3D interativos de vírus, bactérias e órgãos do corpo humano. Projeto acadêmico de computação gráfica.
@@ -138,3 +139,6 @@ Para usar um arquivo pronto (Blender, Sketchfab), salve o `.glb` em `frontend/pu
 ---
 
 Conteúdo educativo. Não substitui orientação de profissionais de saúde. Em emergências, ligue 192.
+=======
+# BioVerso
+>>>>>>> dc11d00027cc9db387c56786e7d317879684e623
