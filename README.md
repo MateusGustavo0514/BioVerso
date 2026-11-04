@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # BioVerso
 
 Site informativo de saúde com modelos 3D interativos de vírus, bactérias e órgãos do corpo humano. Projeto acadêmico de computação gráfica.
@@ -107,7 +106,7 @@ Nenhum modelo é baixado pronto: todos são gerados por código, o que deixa as 
 | Ruído em crista (ridged noise) para giros e sulcos | `cerebro.js` |
 | Distribuição uniforme em esfera (espiral de Fibonacci) | `virus.js` |
 | Instanciamento na GPU (`InstancedMesh`): espículas, fímbrias, anéis, cocos | `virus.js`, `bacilo.js`, `pulmoes.js`, `coco.js` |
-| Curvas paramétricas (hélice, Catmull-Rom) e extrusão de tubos | `bacilo.js`, `coracao.js`, `cerebro.js` |
+| Curvas paramétricas (hélice, Catmull-Rom, super-hélice com referenciais de Frenet) e extrusão de tubos | `virus.js`, `bacilo.js`, `coracao.js`, `cerebro.js` |
 | Estrutura recursiva (fractal) da árvore brônquica | `pulmoes.js` |
 | Amostragem de pontos na superfície da malha | `cerebro.js` |
 | Shaders GLSL próprios: efeito Fresnel e pontos animados | `fresnel.js`, `cerebro.js` |
@@ -139,6 +138,3 @@ Para usar um arquivo pronto (Blender, Sketchfab), salve o `.glb` em `frontend/pu
 ---
 
 Conteúdo educativo. Não substitui orientação de profissionais de saúde. Em emergências, ligue 192.
-=======
-# BioVerso
->>>>>>> dc11d00027cc9db387c56786e7d317879684e623

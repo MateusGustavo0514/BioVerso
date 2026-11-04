@@ -230,7 +230,7 @@ vis.destruir();                 // dispose completo; chame ao sair da página
 - O **corte** usa `renderer.localClippingEnabled = true` e um `THREE.Plane` cuja normal é recalculada a cada quadro para apontar para a câmera. As faces de trás ficam mais escuras por um trecho de GLSL injetado via `onBeforeCompile` em `#prepararMateriais()`.
 - **Raycasting**: cada mesh clicável é marcada com `marcarParte(mesh, 'chave')`, que seta `userData.parte`. O método `#parteSobPonteiro` sobe pelo pai até achar essa marca, e prefere mesh opaca a transparente (importante para os brônquios dentro do pulmão translúcido).
 - **Halo** usa shader próprio e `raycast = () => {}` (não captura clique) + `renderOrder = 10`.
-- **Enquadramento**: `#enquadrar()` calcula a esfera envolvente, centraliza o modelo e ajusta `camera.position`, `near`, `far`, `minDistance`, `maxDistance`. Guarda `this.raioModelo` para o corte.
+- **Enquadramento**: `#enquadrar()` calcula a esfera envolvente, centraliza o modelo e ajusta `camera.position`, `near`, `far`, `minDistance`, `maxDistance`. Guarda `this.semieixos` para o corte (o alcance da barra é a profundidade do modelo na direção da câmera).
 - **Animação de entrada**: scale de 0.6→1.0 com easing `easeOutCubic`.
 
 ---
@@ -246,6 +246,7 @@ export function criarXxx(params, cores) {
   return {
     objeto,     // THREE.Object3D para adicionar na cena
     atualizar,  // (t, dt) => void chamado a cada quadro quando não pausado
+    foco,       // opcional: parte que define a profundidade do corte (ex.: corpo do bacilo, sem os flagelos)
   };
 }
 ```
@@ -256,11 +257,11 @@ Depois registre em `modelos/index.js` com o mesmo nome usado em `modelo_tipo` no
 
 | Arquivo | Técnicas |
 |---|---|
-| `utils/geometria.js` | PRNG com semente (mulberry32), ruído simplex 3D, `mergeVertices`, espiral de Fibonacci na esfera, cilindro orientado entre dois pontos, marcação de parte |
+| `utils/geometria.js` | PRNG com semente (mulberry32), ruído simplex 3D, `mergeVertices`, espiral de Fibonacci na esfera, cilindro orientado entre dois pontos, novelo de curva Catmull-Rom (aberto ou fechado), esferas instanciadas, marcação de parte |
 | `shaders/fresnel.js` | ShaderMaterial GLSL próprio (efeito Fresnel), blending aditivo, uniforms animados |
-| `virus.js` | Esfera deformada por ruído, InstancedMesh para espículas, distribuição Fibonacci + jitter aleatório, quaternion para orientar instâncias, "respiração" animada |
-| `bacilo.js` | CapsuleGeometry, curva paramétrica própria (Hélice) + TubeGeometry para flagelos, hierarquia pivô/inclinação/giro, InstancedMesh para fímbrias com normais da superfície |
-| `coco.js` | Empacotamento esférico aleatório sem sobreposição, InstancedMesh com cores por instância (`setColorAt`), oscilação individual |
+| `virus.js` | Esfera deformada por ruído, InstancedMesh para espículas, distribuição Fibonacci + jitter aleatório, quaternion para orientar instâncias, "respiração" animada, genoma opcional por `nucleo.tipo`: novelo Catmull-Rom + super-hélice com referenciais de Frenet + contas instanciadas (coronavírus); bastões em grampo de dupla hélice no arranjo 7 + 1 (influenza) |
+| `bacilo.js` | CapsuleGeometry, curva paramétrica própria (Hélice) + TubeGeometry para flagelos, hierarquia pivô/inclinação/giro, InstancedMesh para fímbrias com normais da superfície, interior visível no corte: membrana interna, DNA circular em curva fechada, plasmídeos e ribossomos por amostragem com rejeição |
+| `coco.js` | Empacotamento esférico aleatório sem sobreposição, InstancedMesh com cores por instância (`setColorAt`), oscilação individual, interior instanciado por célula (membrana, nucleoide reaproveitado em orientações sorteadas, ribossomos) |
 | `coracao.js` | Deformação de esferas, CatmullRomCurve3 + TubeGeometry para vasos, pulso gaussiano para ciclo cardíaco (átrios contraem antes dos ventrículos) |
 | `pulmoes.js` | Remodelagem vértice-a-vértice para forma anatômica (incisura cardíaca, base no diafragma), árvore brônquica recursiva (fractal), TorusGeometry parcial para anéis de cartilagem, material semitransparente com `DoubleSide` |
 | `cerebro.js` | Ruído em crista (`(1-|noise|)^7`) para sulcos estreitos, lâminas horizontais no cerebelo, `MeshSurfaceSampler` para distribuir pontos na superfície, Points com shader próprio para "sinapses" piscando |

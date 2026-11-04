@@ -37,7 +37,8 @@ export class Visualizador {
     this.pausado = reduzirMovimento;
     this.aramado = false;
     this.corte = 0;
-    this.raioModelo = 0;
+    this.semieixos = new THREE.Vector3();
+    this.centroCorte = new THREE.Vector3();
     this.planoCorte = new THREE.Plane(new THREE.Vector3(0, 0, -1));
 
     // Renderizador
@@ -177,9 +178,13 @@ export class Visualizador {
   #atualizarPlanoCorte() {
     const { normal } = this.planoCorte;
     normal.copy(this.controles.target).sub(this.camera.position).normalize();
+    // profundidade do modelo vista desta direção (elipsoide inscrito na caixa envolvente):
+    // nos pulmões, altos e rasos, usar o maior eixo deixaria a barra sem efeito no começo
+    const s = this.semieixos;
+    const profundidade = Math.hypot(normal.x * s.x, normal.y * s.y, normal.z * s.z);
     // sem corte, o plano fica longe do modelo (remover o plano forçaria recompilar os shaders)
     this.planoCorte.constant = this.corte > 0
-      ? this.raioModelo * (1 - 2 * this.corte * ALCANCE_CORTE)
+      ? profundidade * (1 - 2 * this.corte * ALCANCE_CORTE) - normal.dot(this.centroCorte)
       : this.camera.far;
   }
 
@@ -189,9 +194,14 @@ export class Visualizador {
     const tamanho = caixa.getSize(new THREE.Vector3());
     objeto.position.sub(centro);
 
+    // o corte percorre o `foco` do modelo, quando há um (flagelos longos não contam)
+    objeto.updateMatrixWorld(true);
+    const caixaCorte = new THREE.Box3().setFromObject(this.modelo.foco ?? objeto);
+    caixaCorte.getCenter(this.centroCorte);
+    caixaCorte.getSize(this.semieixos).multiplyScalar(0.5);
+
     // o maior semieixo ocupa ~78% do campo circular
     const raio = Math.max(tamanho.x, tamanho.y, tamanho.z) / 2;
-    this.raioModelo = raio;
     const distancia = raio / Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) / 0.78;
     this.camera.position.set(0, raio * 0.2, distancia);
     this.camera.near = distancia / 100;

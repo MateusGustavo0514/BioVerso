@@ -61,6 +61,37 @@ export function pontosFibonacci(quantidade) {
   return pontos;
 }
 
+/**
+ * Trajeto de um genoma: caminhada sorteada entre cascas esféricas, suavizada por Catmull-Rom.
+ * `escala` estica o novelo (nucleoide de um bacilo) e `fechada` liga o fim ao início (DNA circular).
+ */
+export function curvaNovelo({ raioMin, raioMax, pontos, aleatorio, escala = new THREE.Vector3(1, 1, 1), fechada = false }) {
+  const direcao = new THREE.Vector3(0, 1, 0);
+  const eixo = new THREE.Vector3();
+  const lista = [];
+  for (let i = 0; i < pontos; i++) {
+    eixo.set(aleatorio() - 0.5, aleatorio() - 0.5, aleatorio() - 0.5).cross(direcao).normalize();
+    direcao.applyAxisAngle(eixo, 0.7 + aleatorio() * 0.6);
+    lista.push(direcao.clone().multiplyScalar(raioMin + aleatorio() * (raioMax - raioMin)).multiply(escala));
+  }
+  return new THREE.CatmullRomCurve3(lista, fechada);
+}
+
+/** Esferas instanciadas em posições dadas, com leve variação de tamanho. */
+export function esferasInstanciadas(posicoes, raioEsfera, cor, aleatorio, detalhe = 16) {
+  const malha = new THREE.InstancedMesh(
+    new THREE.SphereGeometry(raioEsfera, detalhe, Math.ceil(detalhe * 0.75)),
+    new THREE.MeshPhysicalMaterial({ color: cor, roughness: 0.5, sheen: 0.6, sheenColor: '#ffffff' }),
+    posicoes.length
+  );
+  const matriz = new THREE.Matrix4();
+  posicoes.forEach((p, i) => {
+    const s = 0.9 + aleatorio() * 0.2;
+    malha.setMatrixAt(i, matriz.makeScale(s, s, s).setPosition(p));
+  });
+  return malha;
+}
+
 /** Cilindro que liga dois pontos (útil para ramificações). */
 export function cilindroEntre(inicio, fim, raioInicio, raioFim, segmentos = 8) {
   const direcao = new THREE.Vector3().subVectors(fim, inicio);
