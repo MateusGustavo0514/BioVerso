@@ -1,0 +1,399 @@
+/* BioVerso: identidade inspirada em lâminas de histologia (coloração H&E) e no campo circular do microscópio */
+
+:root {
+  --vidro: #eef3f2;        /* fundo: vidro de laboratório */
+  --lamina: #fafcfb;       /* superfície das lâminas */
+  --tinta: #17323b;        /* texto principal */
+  --tinta-suave: #4b6770;  /* texto secundário */
+  --palco: #0f2830;        /* fundo do visualizador 3D */
+  --hematoxilina: #4a3c8c; /* corante roxo: links e ações */
+  --eosina: #c94f7c;       /* corante rosa: acentos */
+  --linha: #c6d4d2;
+
+  --fonte-titulo: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --fonte-texto: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+
+  --raio-lamina: 6px;
+  --largura: 1200px;
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { scroll-padding-top: 5rem; }
+
+body {
+  margin: 0;
+  background: var(--vidro);
+  color: var(--tinta);
+  font-family: var(--fonte-texto);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--fonte-titulo);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5em;
+}
+h1 { font-size: clamp(2.3rem, 5vw, 4rem); font-weight: 750; }
+h2 { font-size: 1.35rem; font-weight: 700; }
+h3 { font-size: 1.1rem; font-weight: 650; }
+p { margin: 0 0 1em; }
+
+a { color: var(--hematoxilina); text-underline-offset: 0.18em; }
+a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible {
+  outline: 3px solid var(--eosina);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.pular {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  background: var(--tinta);
+  color: var(--lamina);
+  padding: 0.5rem 1rem;
+  z-index: 100;
+}
+.pular:focus { top: 1rem; }
+
+/* ---------- Topo e rodapé ---------- */
+.topo {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem clamp(1rem, 4vw, 2.5rem);
+  background: color-mix(in srgb, var(--vidro) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--linha);
+  font-family: var(--fonte-titulo);
+}
+.marca {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--tinta);
+  font-weight: 800;
+  font-size: 1.3rem;
+  letter-spacing: -0.03em;
+  text-decoration: none;
+}
+.marca__icone { width: 1.7rem; height: 1.7rem; color: var(--tinta); }
+.topo nav { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
+.topo nav a { color: var(--tinta); text-decoration: none; font-weight: 500; }
+.topo nav a:hover { color: var(--hematoxilina); text-decoration: underline; }
+
+main { max-width: var(--largura); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2.5rem); }
+main:focus { outline: none; }
+
+.rodape {
+  max-width: var(--largura);
+  margin: 5rem auto 0;
+  padding: 2rem clamp(1rem, 4vw, 2.5rem) 3rem;
+  border-top: 1px solid var(--linha);
+  color: var(--tinta-suave);
+  font-size: 0.95rem;
+}
+.rodape p { margin: 0 0 0.35rem; max-width: 70ch; }
+
+/* ---------- Botões ---------- */
+.botao {
+  display: inline-block;
+  padding: 0.8rem 1.4rem;
+  background: var(--hematoxilina);
+  color: #fff;
+  font-family: var(--fonte-titulo);
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 999px;
+}
+.botao:hover { background: #3b2f73; }
+
+/* ---------- Campo do microscópio (o elemento marcante) ---------- */
+.campo {
+  position: relative;
+  margin: 0;
+  background: radial-gradient(circle at 50% 45%, #1d4450 0%, var(--palco) 62%);
+  border-radius: 20px;
+  overflow: hidden;
+  isolation: isolate;
+}
+.campo__palco { position: absolute; inset: 0; }
+.campo__palco canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+/* máscara circular: o que está fora do "campo de visão" escurece */
+.campo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, transparent 44%, rgba(4, 16, 20, 0.55) 46%, rgba(4, 16, 20, 0.85) 75%);
+  z-index: 1;
+}
+.campo::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 92%;
+  aspect-ratio: 1;
+  max-height: 92%;
+  translate: -50% -50%;
+  border-radius: 50%;
+  border: 1px solid rgba(190, 230, 235, 0.18);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.campo__legenda {
+  position: absolute;
+  left: 1.1rem;
+  bottom: 0.9rem;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #cfe3e6;
+  font-family: var(--fonte-titulo);
+  font-size: 0.85rem;
+}
+.escala {
+  display: inline-block;
+  width: 3rem;
+  height: 4px;
+  background: #cfe3e6;
+  border-radius: 2px;
+}
+.campo__instrucao {
+  position: absolute;
+  right: 1.1rem;
+  top: 0.9rem;
+  z-index: 3;
+  margin: 0;
+  max-width: 22ch;
+  text-align: right;
+  color: #9dbcc2;
+  font-family: var(--fonte-titulo);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.dica-parte {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  padding: 0.3rem 0.65rem;
+  background: var(--lamina);
+  color: var(--tinta);
+  border-left: 3px solid var(--eosina);
+  font-family: var(--fonte-titulo);
+  font-size: 0.85rem;
+  font-weight: 600;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ferramentas de CG sobre o campo (pausa, aramado, corte) */
+.ferramentas {
+  position: absolute;
+  left: 1.1rem;
+  top: 0.9rem;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  max-width: calc(100% - 2.2rem);
+}
+.ferramenta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font: 500 0.82rem var(--fonte-titulo);
+  color: #d7e8ea;
+  background: rgba(15, 40, 48, 0.72);
+  border: 1px solid rgba(190, 230, 235, 0.25);
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.ferramenta:hover { border-color: rgba(190, 230, 235, 0.6); }
+.ferramenta[aria-pressed='true'] { background: var(--eosina); border-color: var(--eosina); color: #fff; }
+.ferramenta--corte { cursor: default; }
+.ferramenta--corte input { width: 6.5rem; accent-color: var(--eosina); }
+
+/* ---------- Abertura (página inicial) ---------- */
+.abertura {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  padding: clamp(2rem, 6vw, 4.5rem) 0 clamp(3rem, 7vw, 5rem);
+}
+.abertura h1 { max-width: 15ch; font-size: clamp(2.3rem, 4.6vw, 3.8rem); }
+.abertura__lead { font-size: 1.2rem; max-width: 38ch; color: var(--tinta-suave); margin-bottom: 1.75rem; }
+.campo--abertura { aspect-ratio: 1 / 1; max-height: 78vh; }
+
+/* ---------- Coleções e lâminas ---------- */
+.colecao { padding: 2.5rem 0 1rem; border-top: 1px solid var(--linha); }
+.colecao__cabecalho { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 1.25rem; margin-bottom: 1.5rem; }
+.colecao__cabecalho h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); margin: 0; }
+.colecao__cabecalho p { margin: 0; color: var(--tinta-suave); }
+
+.laminas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 1.25rem;
+}
+
+/* proporção 3:1, a mesma de uma lâmina de microscópio (75 × 25 mm) */
+.lamina {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  grid-template-rows: auto auto;
+  color: inherit;
+  text-decoration: none;
+}
+.lamina__etiqueta,
+.lamina__vidro { aspect-ratio: auto; min-height: 7.5rem; }
+.lamina__etiqueta {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.75rem;
+  background:
+    repeating-linear-gradient(135deg, rgba(23, 50, 59, 0.05) 0 2px, transparent 2px 6px),
+    #dfe7e5;
+  border-radius: var(--raio-lamina) 0 0 var(--raio-lamina);
+  border: 1px solid var(--linha);
+  border-right: none;
+}
+.lamina__nome { font-family: var(--fonte-titulo); font-weight: 700; line-height: 1.15; }
+.lamina__cientifico { font-style: italic; font-size: 0.85rem; color: var(--tinta-suave); line-height: 1.3; }
+.lamina__vidro {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(230, 240, 240, 0.6));
+  border: 1px solid var(--linha);
+  border-radius: 0 var(--raio-lamina) var(--raio-lamina) 0;
+}
+.lamina__resumo { grid-column: 1 / -1; padding: 0.6rem 0.1rem 0; font-size: 0.95rem; color: var(--tinta-suave); }
+.lamina:hover .lamina__nome { color: var(--hematoxilina); text-decoration: underline; }
+.lamina:hover .mancha { scale: 1.08; }
+
+.mancha {
+  display: inline-block;
+  width: 4.2rem;
+  aspect-ratio: 1.3;
+  border-radius: 58% 42% 55% 45% / 48% 60% 40% 52%;
+  background:
+    radial-gradient(circle at 35% 40%, color-mix(in srgb, var(--c1) 90%, white) 0 18%, transparent 45%),
+    radial-gradient(circle at 60% 60%, var(--c1), color-mix(in srgb, var(--c2) 70%, var(--c1)));
+  opacity: 0.85;
+  filter: saturate(1.1);
+  transition: scale 0.25s ease;
+}
+
+/* ---------- Página de espécime ---------- */
+.trilha { display: flex; gap: 0.5rem; padding: 1.5rem 0 1rem; font-family: var(--fonte-titulo); font-size: 0.95rem; color: var(--tinta-suave); }
+
+.especime__grade {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(1.5rem, 3vw, 3rem);
+  align-items: start;
+}
+.campo--especime { position: sticky; top: 5rem; aspect-ratio: 1 / 1; max-height: calc(100vh - 6rem); }
+
+.especime__info h1 { font-size: clamp(2.2rem, 4vw, 3.2rem); margin-bottom: 0.1em; }
+.cientifico { font-style: italic; font-size: 1.15rem; color: var(--tinta-suave); }
+.especime__descricao { max-width: 62ch; }
+.especime__info section { margin-top: 2rem; }
+
+.partes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+.parte {
+  font: 500 0.95rem var(--fonte-titulo);
+  color: var(--tinta);
+  background: var(--lamina);
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+.parte:hover { border-color: var(--hematoxilina); }
+.parte[aria-pressed='true'] { background: var(--hematoxilina); border-color: var(--hematoxilina); color: #fff; }
+
+.parte-detalhe {
+  padding: 1rem 1.1rem;
+  background: var(--lamina);
+  border-left: 4px solid var(--eosina);
+  border-radius: 0 var(--raio-lamina) var(--raio-lamina) 0;
+  min-height: 5.5rem;
+}
+.parte-detalhe p { margin: 0; }
+.parte-detalhe__vazio { color: var(--tinta-suave); font-style: italic; }
+
+.lista-doencas { list-style: none; margin: 0; padding: 0; }
+.lista-doencas li { display: flex; flex-direction: column; padding: 0.7rem 0; border-bottom: 1px solid var(--linha); }
+.lista-doencas a { font-family: var(--fonte-titulo); font-weight: 650; font-size: 1.1rem; }
+.lista-doencas span { color: var(--tinta-suave); font-size: 0.95rem; }
+.lista-doencas--grande { max-width: 60ch; }
+.lista-doencas--grande a { font-size: 1.35rem; }
+
+.curiosidades { margin: 0; padding-left: 1.2rem; }
+.curiosidades li { margin-bottom: 0.5rem; }
+.curiosidades li::marker { color: var(--eosina); }
+
+/* ---------- Páginas de texto ---------- */
+.pagina { padding: 1rem 0 2rem; max-width: 70ch; }
+.pagina > h1 { margin-top: 1rem; }
+.pagina__lead { font-size: 1.2rem; color: var(--tinta-suave); }
+
+.ficha { margin: 2rem 0; }
+.ficha div { padding: 1rem 0; border-top: 1px solid var(--linha); }
+.ficha dt { font-family: var(--fonte-titulo); font-weight: 700; font-size: 1.1rem; margin-bottom: 0.25rem; }
+.ficha dd { margin: 0; }
+
+.relacionadas { list-style: none; padding: 0; margin: 0 0 2rem; display: grid; gap: 0.75rem; }
+.relacionadas a { display: flex; align-items: center; gap: 1rem; color: inherit; text-decoration: none; }
+.relacionadas .mancha { width: 3rem; }
+.relacionadas span { display: flex; flex-direction: column; line-height: 1.3; }
+.relacionadas strong { font-family: var(--fonte-titulo); color: var(--hematoxilina); }
+.relacionadas a:hover strong { text-decoration: underline; }
+.relacionadas em { color: var(--tinta-suave); font-size: 0.9rem; }
+
+/* ---------- Estados ---------- */
+.carregando { color: var(--tinta-suave); padding: 2rem 0; }
+.aviso { padding: 1rem 1.2rem; background: #fbeef3; border-left: 4px solid var(--eosina); border-radius: 0 var(--raio-lamina) var(--raio-lamina) 0; color: var(--tinta); }
+.aviso p { margin: 0; }
+.aviso__titulo { font-family: var(--fonte-titulo); font-weight: 700; }
+.campo .aviso { position: relative; z-index: 5; margin: 1rem; }
+.vazio { color: var(--tinta-suave); }
+
+/* ---------- Responsivo ---------- */
+@media (max-width: 860px) {
+  .abertura,
+  .especime__grade { grid-template-columns: 1fr; }
+  .campo--especime { position: relative; top: 0; }
+  .campo__instrucao { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+}

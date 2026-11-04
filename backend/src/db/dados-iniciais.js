@@ -1,0 +1,238 @@
+// Conteúdo inicial do BioVerso.
+// Textos educativos e resumidos: revisem com o professor/fontes oficiais (OMS, Ministério da Saúde) antes da entrega.
+
+export const categorias = [
+  { slug: 'virus', nome: 'Vírus', descricao: 'Partículas que só se multiplicam dentro de células vivas.', ordem: 1 },
+  { slug: 'bacteria', nome: 'Bactérias', descricao: 'Organismos de uma só célula, muitos deles essenciais para a nossa saúde.', ordem: 2 },
+  { slug: 'orgao', nome: 'Órgãos', descricao: 'Estruturas do corpo humano e as doenças que podem afetá-las.', ordem: 3 },
+];
+
+export const entidades = [
+  {
+    slug: 'sars-cov-2',
+    nome: 'Coronavírus',
+    nome_cientifico: 'SARS-CoV-2',
+    categoria: 'virus',
+    resumo: 'Vírus de RNA envelopado que causa a COVID-19.',
+    descricao:
+      'O SARS-CoV-2 é um betacoronavírus identificado no fim de 2019. Seu material genético é uma única fita de RNA, protegida por um envelope de gordura coberto por proteínas Spike. Essas proteínas se ligam ao receptor ACE2, presente em células das vias respiratórias e de outros tecidos, e permitem que o vírus entre na célula e use a maquinaria dela para se multiplicar.',
+    tamanho: 'Cerca de 80 a 120 nm de diâmetro',
+    modelo_tipo: 'virus',
+    modelo_params: {
+      raio: 1,
+      rugosidade: 0.05,
+      saliencias: 320,
+      espiculas: [{ chave: 'espicula', quantidade: 40, comprimento: 0.3, bulbo: 0.13 }],
+    },
+    cor_primaria: '#c9a38f',
+    cor_secundaria: '#c94f7c',
+    partes: [
+      { chave: 'envelope', nome: 'Envelope lipídico', descricao: 'Membrana de gordura retirada da célula infectada. É frágil: sabão e álcool 70% conseguem desmontá-la.' },
+      { chave: 'espicula', nome: 'Proteína Spike (S)', descricao: 'Se encaixa no receptor ACE2 das células humanas e abre caminho para o vírus entrar. É o principal alvo das vacinas.' },
+      { chave: 'proteina_m', nome: 'Proteínas M e E', descricao: 'Proteínas menores embutidas no envelope que ajudam a dar forma à partícula e a montá-la dentro da célula.' },
+    ],
+    curiosidades: [
+      'O nome "corona" vem da coroa de espículas vista ao microscópio eletrônico.',
+      'Estudos de criomicroscopia estimam algumas dezenas de espículas por partícula viral. O modelo usa 40.',
+    ],
+    doencas: [{ slug: 'covid-19', relacao: 'causa' }],
+  },
+  {
+    slug: 'influenza-a',
+    nome: 'Vírus da gripe',
+    nome_cientifico: 'Influenza A',
+    categoria: 'virus',
+    resumo: 'Vírus de RNA segmentado responsável pelas epidemias sazonais de gripe.',
+    descricao:
+      'O vírus Influenza A tem o genoma dividido em oito segmentos de RNA. Na superfície, duas proteínas definem seu subtipo: a hemaglutinina (H) e a neuraminidase (N). Quando duas linhagens infectam a mesma célula, os segmentos podem se misturar e gerar um vírus novo, mecanismo por trás de pandemias como a de 2009 (H1N1).',
+    tamanho: 'Cerca de 80 a 120 nm de diâmetro',
+    modelo_tipo: 'virus',
+    modelo_params: {
+      raio: 1,
+      rugosidade: 0.03,
+      saliencias: 0,
+      espiculas: [
+        { chave: 'hemaglutinina', quantidade: 150, comprimento: 0.22, bulbo: 0.05 },
+        { chave: 'neuraminidase', quantidade: 35, comprimento: 0.2, bulbo: 0.09, cor: '#e8c26a' },
+      ],
+    },
+    cor_primaria: '#8fb3c9',
+    cor_secundaria: '#4a3c8c',
+    partes: [
+      { chave: 'envelope', nome: 'Envelope lipídico', descricao: 'Membrana que protege os oito segmentos de RNA do vírus.' },
+      { chave: 'hemaglutinina', nome: 'Hemaglutinina (H)', descricao: 'Prende o vírus à célula que ele vai infectar. É a proteína mais abundante na superfície.' },
+      { chave: 'neuraminidase', nome: 'Neuraminidase (N)', descricao: 'Corta a ligação com a célula e libera as novas partículas. Alguns antivirais agem bloqueando essa proteína.' },
+    ],
+    curiosidades: [
+      'São conhecidos 18 tipos de hemaglutinina e 11 de neuraminidase.',
+      'O vírus muda com frequência, por isso a vacina da gripe é atualizada todos os anos.',
+    ],
+    doencas: [{ slug: 'gripe', relacao: 'causa' }],
+  },
+  {
+    slug: 'escherichia-coli',
+    nome: 'E. coli',
+    nome_cientifico: 'Escherichia coli',
+    categoria: 'bacteria',
+    resumo: 'Bactéria em forma de bastão que vive no intestino humano.',
+    descricao:
+      'A Escherichia coli faz parte da microbiota intestinal saudável e a maioria das cepas é inofensiva. Algumas, porém, adquiriram genes de toxinas ou de aderência e causam infecções urinárias, diarreias e, mais raramente, complicações graves como a síndrome hemolítico-urêmica. É uma bactéria Gram-negativa e se move com flagelos espalhados por toda a superfície.',
+    tamanho: 'Cerca de 2 µm de comprimento e 0,5 µm de largura',
+    modelo_tipo: 'bacilo',
+    modelo_params: { comprimento: 2, raio: 0.5, flagelos: 7, pili: 90 },
+    cor_primaria: '#5e9c7e',
+    cor_secundaria: '#e8d9b0',
+    partes: [
+      { chave: 'membrana', nome: 'Parede celular', descricao: 'Envoltório de bactéria Gram-negativa: uma fina camada de peptidoglicano protegida por uma membrana externa.' },
+      { chave: 'flagelo', nome: 'Flagelos', descricao: 'Filamentos em hélice movidos por um motor molecular na base, que gira e empurra a bactéria.' },
+      { chave: 'pili', nome: 'Fímbrias', descricao: 'Filamentos curtos e numerosos que prendem a bactéria às superfícies, como a parede da bexiga.' },
+    ],
+    curiosidades: [
+      'Em condições ideais, pode se dividir a cada 20 minutos.',
+      'É usada em laboratório para produzir insulina humana desde a década de 1980.',
+    ],
+    doencas: [
+      { slug: 'infeccao-urinaria', relacao: 'causa' },
+      { slug: 'intoxicacao-alimentar', relacao: 'causa' },
+    ],
+  },
+  {
+    slug: 'staphylococcus-aureus',
+    nome: 'Estafilococo dourado',
+    nome_cientifico: 'Staphylococcus aureus',
+    categoria: 'bacteria',
+    resumo: 'Bactéria esférica que se agrupa em cachos e vive na pele e no nariz.',
+    descricao:
+      'O Staphylococcus aureus é uma bactéria Gram-positiva que costuma conviver com o corpo sem causar problemas. Quando encontra uma porta de entrada, como um corte, pode provocar desde furúnculos até pneumonia e infecções no sangue. Algumas cepas, como a MRSA, são resistentes a vários antibióticos e preocupam hospitais no mundo todo.',
+    tamanho: 'Cerca de 1 µm de diâmetro por célula',
+    modelo_tipo: 'coco',
+    modelo_params: { celulas: 22, raio: 0.5 },
+    cor_primaria: '#e0b04a',
+    cor_secundaria: '#8a5a1c',
+    partes: [
+      { chave: 'celula', nome: 'Célula (coco)', descricao: 'Cada esfera é uma bactéria completa. Elas se dividem em planos diferentes e continuam grudadas, formando cachos.' },
+    ],
+    curiosidades: [
+      'O nome vem do grego staphylé (cacho de uvas) e do latim aureus (dourado), pela cor das colônias.',
+      'Vive no nariz de cerca de 30% das pessoas sem causar doença.',
+    ],
+    doencas: [
+      { slug: 'pneumonia', relacao: 'causa' },
+      { slug: 'intoxicacao-alimentar', relacao: 'causa' },
+    ],
+  },
+  {
+    slug: 'coracao',
+    nome: 'Coração',
+    nome_cientifico: 'Cor',
+    categoria: 'orgao',
+    resumo: 'Músculo que bombeia sangue para todo o corpo, sem parar.',
+    descricao:
+      'O coração tem quatro câmaras: dois átrios, que recebem o sangue, e dois ventrículos, que o bombeiam. O lado direito envia sangue pobre em oxigênio aos pulmões; o lado esquerdo distribui o sangue oxigenado para o resto do corpo. Um sistema elétrico próprio, iniciado no nó sinusal, coordena cada batimento: primeiro contraem os átrios, depois os ventrículos.',
+    tamanho: 'Do tamanho de um punho fechado, com 250 a 350 g',
+    modelo_tipo: 'coracao',
+    modelo_params: { bpm: 70 },
+    cor_primaria: '#9e2a36',
+    cor_secundaria: '#3f5fa8',
+    partes: [
+      { chave: 'ventriculo_esquerdo', nome: 'Ventrículo esquerdo', descricao: 'A câmara de parede mais grossa: bombeia sangue oxigenado para o corpo inteiro pela aorta.' },
+      { chave: 'ventriculo_direito', nome: 'Ventrículo direito', descricao: 'Envia o sangue pobre em oxigênio para os pulmões pelo tronco pulmonar.' },
+      { chave: 'atrio_direito', nome: 'Átrio direito', descricao: 'Recebe o sangue que volta do corpo pelas veias cavas. Abriga o nó sinusal, o marca-passo natural do coração.' },
+      { chave: 'atrio_esquerdo', nome: 'Átrio esquerdo', descricao: 'Recebe o sangue oxigenado que chega dos pulmões pelas veias pulmonares.' },
+      { chave: 'aorta', nome: 'Aorta', descricao: 'A maior artéria do corpo. Sai do ventrículo esquerdo, faz um arco e distribui sangue para todo o organismo.' },
+      { chave: 'arteria_pulmonar', nome: 'Tronco pulmonar', descricao: 'Leva sangue pobre em oxigênio do ventrículo direito até os pulmões. Por isso aparece em azul nos modelos.' },
+      { chave: 'veia_cava', nome: 'Veia cava superior', descricao: 'Traz de volta ao átrio direito o sangue da cabeça, do pescoço e dos braços.' },
+    ],
+    curiosidades: [
+      'Bate cerca de 100 mil vezes por dia.',
+      'Em repouso, bombeia por volta de 5 litros de sangue por minuto.',
+    ],
+    doencas: [{ slug: 'infarto', relacao: 'afeta' }],
+  },
+  {
+    slug: 'pulmoes',
+    nome: 'Pulmões',
+    nome_cientifico: 'Pulmones',
+    categoria: 'orgao',
+    resumo: 'Órgãos onde o oxigênio entra no sangue e o gás carbônico sai.',
+    descricao:
+      'O ar entra pela traqueia, segue pelos brônquios e chega aos alvéolos, pequenos sacos envoltos por capilares. Ali, o oxigênio atravessa uma parede finíssima até o sangue, enquanto o gás carbônico faz o caminho inverso. Os pulmões não têm músculos próprios para respirar: quem os expande é o diafragma, junto com os músculos entre as costelas.',
+    tamanho: 'Pulmão direito com 3 lobos e esquerdo com 2',
+    modelo_tipo: 'pulmoes',
+    modelo_params: { respiracoesPorMinuto: 14, ramificacoes: 5 },
+    cor_primaria: '#d9707f',
+    cor_secundaria: '#f1e4d3',
+    partes: [
+      { chave: 'pulmao_direito', nome: 'Pulmão direito', descricao: 'Dividido em três lobos. É um pouco maior que o esquerdo.' },
+      { chave: 'pulmao_esquerdo', nome: 'Pulmão esquerdo', descricao: 'Tem dois lobos e uma reentrância, a incisura cardíaca, onde o coração se acomoda.' },
+      { chave: 'traqueia', nome: 'Traqueia', descricao: 'Tubo reforçado por anéis de cartilagem em forma de C, que impedem que ela se feche durante a respiração.' },
+      { chave: 'bronquios', nome: 'Árvore brônquica', descricao: 'Os brônquios se ramificam cerca de 23 vezes até chegar aos alvéolos, onde acontece a troca de gases.' },
+    ],
+    curiosidades: [
+      'Um adulto em repouso respira de 12 a 20 vezes por minuto.',
+      'Os pulmões têm centenas de milhões de alvéolos.',
+    ],
+    doencas: [
+      { slug: 'covid-19', relacao: 'afeta' },
+      { slug: 'gripe', relacao: 'afeta' },
+      { slug: 'pneumonia', relacao: 'afeta' },
+    ],
+  },
+];
+
+export const doencas = [
+  {
+    slug: 'covid-19',
+    nome: 'COVID-19',
+    resumo: 'Doença respiratória causada pelo SARS-CoV-2.',
+    descricao: 'Pode ir de quadros leves a pneumonia grave. Foi declarada pandemia pela Organização Mundial da Saúde em março de 2020.',
+    transmissao: 'Principalmente por gotículas e aerossóis respiratórios, sobretudo em ambientes fechados e mal ventilados.',
+    sintomas: 'Febre, tosse, cansaço, dor de garganta, congestão nasal e perda de olfato ou paladar. Falta de ar exige atendimento médico.',
+    prevencao: 'Vacinação em dia, ventilação dos ambientes, higiene das mãos e uso de máscara em situações de maior risco.',
+  },
+  {
+    slug: 'gripe',
+    nome: 'Gripe',
+    resumo: 'Infecção respiratória aguda causada pelos vírus influenza.',
+    descricao: 'Tem surtos sazonais; em boa parte do Brasil, os casos aumentam no outono e no inverno.',
+    transmissao: 'Gotículas e aerossóis expelidos ao tossir, espirrar ou falar, e contato das mãos com superfícies contaminadas.',
+    sintomas: 'Febre de início súbito, dores no corpo, dor de cabeça, tosse seca, dor de garganta e cansaço.',
+    prevencao: 'Vacinação anual, lavar as mãos com frequência, cobrir boca e nariz ao tossir e ficar em casa quando doente.',
+  },
+  {
+    slug: 'pneumonia',
+    nome: 'Pneumonia',
+    resumo: 'Infecção que inflama os alvéolos dos pulmões.',
+    descricao: 'Os alvéolos podem se encher de líquido ou pus. Pode ser causada por bactérias, vírus ou fungos; a bactéria Streptococcus pneumoniae é a causa bacteriana mais comum.',
+    transmissao: 'Varia conforme o agente; muitos são transmitidos por via respiratória.',
+    sintomas: 'Tosse com catarro, febre, calafrios, dor no peito ao respirar e falta de ar.',
+    prevencao: 'Vacinas (pneumocócica, gripe e COVID-19), não fumar e tratar infecções respiratórias adequadamente.',
+  },
+  {
+    slug: 'infeccao-urinaria',
+    nome: 'Infecção urinária',
+    resumo: 'Infecção em alguma parte do sistema urinário, geralmente na bexiga.',
+    descricao: 'É bem mais frequente em mulheres, por causa da uretra mais curta. A E. coli é a principal causadora.',
+    transmissao: 'Não é considerada contagiosa; em geral, bactérias do próprio intestino chegam à uretra.',
+    sintomas: 'Ardor ao urinar, vontade frequente de urinar, dor no baixo ventre e urina turva. Febre e dor lombar podem indicar que a infecção chegou aos rins.',
+    prevencao: 'Beber água ao longo do dia, não segurar a urina por muito tempo e fazer a higiene íntima da frente para trás.',
+  },
+  {
+    slug: 'intoxicacao-alimentar',
+    nome: 'Intoxicação alimentar',
+    resumo: 'Mal-estar causado por alimentos contaminados por microrganismos ou suas toxinas.',
+    descricao: 'Os sintomas costumam aparecer poucas horas ou alguns dias depois de comer o alimento contaminado.',
+    transmissao: 'Alimentos ou água contaminados, especialmente carnes malcozidas, leite não pasteurizado e comida mal refrigerada.',
+    sintomas: 'Náusea, vômitos, cólicas e diarreia. Diarreia com sangue, sinais de desidratação ou febre alta pedem avaliação médica.',
+    prevencao: 'Cozinhar bem as carnes, lavar as mãos e os alimentos, manter a refrigeração adequada e evitar leite cru.',
+  },
+  {
+    slug: 'infarto',
+    nome: 'Infarto agudo do miocárdio',
+    resumo: 'Morte de parte do músculo do coração por falta de sangue.',
+    descricao: 'Geralmente acontece quando uma placa de gordura se rompe e forma um coágulo que bloqueia uma artéria coronária.',
+    transmissao: 'Não transmissível.',
+    sintomas: 'Dor ou aperto no peito que pode irradiar para braço, costas ou mandíbula, falta de ar, suor frio e náusea. Em caso de suspeita, ligue imediatamente para o SAMU (192).',
+    prevencao: 'Não fumar, controlar pressão arterial, colesterol e diabetes, praticar atividade física e manter alimentação equilibrada.',
+  },
+];
