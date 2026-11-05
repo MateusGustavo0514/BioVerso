@@ -111,7 +111,8 @@ Nenhum modelo é baixado pronto: todos são gerados por código, o que deixa as 
 | Amostragem de pontos na superfície da malha | `cerebro.js` |
 | Shaders GLSL próprios: efeito Fresnel e pontos animados | `fresnel.js`, `cerebro.js` |
 | Modificação do shader padrão via `onBeforeCompile` (faces internas escurecidas) | `Visualizador.js` |
-| Plano de corte (clipping) orientado pela câmera | `Visualizador.js` |
+| Plano de corte (clipping) orientado pela câmera e fixo no modelo, permitindo girar a peça cortada | `Visualizador.js` |
+| Renderização em duas passagens: o modelo é partido em duas peças sem duplicar geometria, com plano de corte invertido e transformado por matriz | `Visualizador.js` |
 | Modo aramado (wireframe) | `Visualizador.js` |
 | Raycasting para seleção de partes com o mouse | `Visualizador.js` |
 | Animação por quadro: ciclo cardíaco, respiração, flagelos, pulsos | modelos |

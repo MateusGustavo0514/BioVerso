@@ -187,7 +187,7 @@ Cada página exporta uma função `async (raiz, ...params) => limparOpcional`. S
 ### Páginas
 
 - **inicio.js**: hero com o coronavírus girando sozinho + três coleções (`<ul class="laminas">`) com cartões no formato 3:1 de lâmina de microscópio.
-- **especime.js**: grid com o Visualizador à esquerda (sticky), e à direita texto + lista de partes clicáveis + doenças relacionadas (seções "Causa" e "Pode ser afetado por") + curiosidades. Barra de ferramentas sobre o campo: **Pausar**, **Aramado**, **Corte** (range 0–1).
+- **especime.js**: grid com o Visualizador à esquerda (sticky), e à direita texto + lista de partes clicáveis + doenças relacionadas (seções "Causa" e "Pode ser afetado por") + curiosidades. Barra de ferramentas sobre o campo: **Pausar**, **Aramado**, **Corte** (range 0–1). O corte em duas peças fica no menu do botão direito sobre o modelo (`Cortar em duas peças` / `Juntar peças`); o botão **Separar peças** continua na barra só para teclado e toque (`.ferramenta--reserva`).
 - **doencas.js**: lista simples; detalhe com transmissão/sintomas/prevenção e as entidades relacionadas agrupadas por relação.
 
 ### Estilo
@@ -214,24 +214,56 @@ const vis = new Visualizador(elementoDiv, {
   girarSozinho: true,     // autoRotate até o usuário interagir
   aoPassar(chave, x, y),  // callback de hover (para tooltip)
   aoSelecionar(chave),    // callback de clique
+  aoMenu(x, y),           // callback do botão direito sobre o modelo (abre o menu de corte)
 });
 
 await vis.carregar(entidade);   // monta o modelo e enquadra a câmera
 vis.selecionar(chave|null);     // destaque programático (usado pelos botões de parte)
 vis.pausar(true|false);         // liga/desliga animação + autoRotate
 vis.definirAramado(true|false); // wireframe nos materiais standard
-vis.definirCorte(0..1);         // plano de clipping orientado pela câmera (0 = sem corte)
+vis.definirCorte(0..1);         // plano de clipping fixo no modelo, orientado pela câmera ao sair do 0 (0 = sem corte)
+vis.separar(true|false);        // true: parte em duas peças no plano de corte (sem corte, corta perto do meio); false: junta e zera o corte
 vis.destruir();                 // dispose completo; chame ao sair da página
 ```
 
 ### Decisões de design que não devem ser quebradas
 
 - Materiais devem ser `MeshStandardMaterial` ou `MeshPhysicalMaterial` para funcionar com corte/aramado/destaque emissivo. ShaderMaterials (como o halo) ficam fora dessas transformações, por design.
-- O **corte** usa `renderer.localClippingEnabled = true` e um `THREE.Plane` cuja normal é recalculada a cada quadro para apontar para a câmera. As faces de trás ficam mais escuras por um trecho de GLSL injetado via `onBeforeCompile` em `#prepararMateriais()`.
+- O **corte** usa `renderer.localClippingEnabled = true` e um `THREE.Plane` cuja normal aponta para a câmera no momento em que a barra sai do 0 e depois fica fixa, para o usuário girar em volta do modelo cortado. Voltar a barra para 0 libera a orientação. As faces de trás ficam mais escuras por um trecho de GLSL injetado via `onBeforeCompile` em `#prepararMateriais()`.
+- **Peças separadas**: não há geometria duplicada. Em `#desenhar()`, a cena é renderizada duas vezes por quadro (`autoClear = false`), cada uma com a matriz da peça no pivô e o plano invertido e transformado em `planoDesenho`, o plano que os materiais usam. `planoCorte` guarda o corte original. O raycasting testa as duas poses. O halo fica oculto enquanto as peças estão abertas. O `pointerdown` usa fase de captura para decidir antes do `OrbitControls` se o arraste é da peça ou da câmera.
 - **Raycasting**: cada mesh clicável é marcada com `marcarParte(mesh, 'chave')`, que seta `userData.parte`. O método `#parteSobPonteiro` sobe pelo pai até achar essa marca, e prefere mesh opaca a transparente (importante para os brônquios dentro do pulmão translúcido).
 - **Halo** usa shader próprio e `raycast = () => {}` (não captura clique) + `renderOrder = 10`.
 - **Enquadramento**: `#enquadrar()` calcula a esfera envolvente, centraliza o modelo e ajusta `camera.position`, `near`, `far`, `minDistance`, `maxDistance`. Guarda `this.semieixos` para o corte (o alcance da barra é a profundidade do modelo na direção da câmera).
 - **Animação de entrada**: scale de 0.6→1.0 com easing `easeOutCubic`.
+
+### Clipping: o que o projeto cobre (e o que não)
+
+O corte é uma aplicação do conceito de **clipping** de computação gráfica. Ao documentar ou apresentar, use os termos abaixo e não prometa mais do que o código faz.
+
+**O que está implementado**
+
+| Conceito de CG | Onde aparece |
+|---|---|
+| Plano de clipping definido pelo usuário (equação do plano, teste de semiespaço) | `planoCorte` (`THREE.Plane`): orientado pela câmera ao sair do 0, fixo no modelo, posição pela barra |
+| Clipping do frustum de visão | `camera.near` e `camera.far`, calculados em `#enquadrar()`, para o modelo não ser recortado pelo volume de visão |
+| Mesmo teste de semiespaço no picking | `#acertoSobPonteiro` descarta acertos com `planoDesenho.distanceToPoint(...) < 0` (na CPU) |
+| Planos complementares | Separar peças: duas passagens, com o plano e o seu inverso; cada passagem mostra um semiespaço |
+| Transformação do plano por matriz | `planoDesenho.applyMatrix4(this.pivo.matrix)`: cada peça leva o seu plano junto |
+
+**Limites** (verificados em `node_modules/three/src/renderers/shaders/ShaderChunk/clipping_planes_fragment.glsl.js`, Three.js 0.186)
+
+- O recorte é **por fragmento**: o Three.js executa `if (dot(vClipPosition, plane.xyz) > plane.w) discard;` no fragment shader. Não é clipping geométrico, que divide os triângulos que cruzam a fronteira (como o Sutherland–Hodgman do clipping do frustum), e não cria vértices novos. A extensão `WEBGL_clip_cull_distance` só entra se o material optar por ela (`material.extensions.clipCullDistance`), o que não fazemos.
+- O algoritmo de recorte é do Three.js. O projeto configura, orienta e posiciona o plano e cuida de toda a interação. **Não afirmar que implementamos o algoritmo de clipping.**
+- Não há tampa: a superfície cortada é oca e as paredes ficam sem espessura.
+- Escurecer as faces internas (`gl_FrontFacing` em `onBeforeCompile`) é sombreamento, não clipping, mas é o que torna o corte legível.
+
+**Como descrever:** "plano de clipping definido pelo usuário, orientado pela câmera e fixo no modelo, implementado por descarte de fragmentos (Three.js); a separação em duas peças usa duas passagens de renderização com planos complementares".
+
+**Para tornar o clipping mais autoral** (em ordem de esforço):
+
+1. Escrever o descarte em GLSL próprio, via `onBeforeCompile`, com um `uniform` do plano. Já injetamos código ali, então a mudança é pequena.
+2. Tampa do corte com **stencil buffer** (clipping + capping): resolve as paredes ocas e acrescenta uma técnica clássica.
+3. Recorte geométrico na CPU (Sutherland–Hodgman nos triângulos): é o mais fiel ao conceito, mas grande e difícil com `InstancedMesh`.
 
 ---
 
@@ -301,7 +333,7 @@ Depois registre em `modelos/index.js` com o mesmo nome usado em `modelo_tipo` no
 COVID-19, Gripe, Pneumonia, Infecção urinária, Intoxicação alimentar, Infarto agudo do miocárdio, AVC
 
 ### Features de CG implementadas
-Iluminação PBR + IBL, raycasting com hover/clique, geometria procedural com ruído, ruído em crista, InstancedMesh, árvore fractal, curvas paramétricas, TubeGeometry, MeshSurfaceSampler, shaders GLSL próprios (Fresnel + Points), modificação de shader padrão via onBeforeCompile, plano de corte orientado pela câmera, modo aramado, pausa, animações por quadro (ciclo cardíaco, respiração, flagelos, sinapses).
+Iluminação PBR + IBL, raycasting com hover/clique, geometria procedural com ruído, ruído em crista, InstancedMesh, árvore fractal, curvas paramétricas, TubeGeometry, MeshSurfaceSampler, shaders GLSL próprios (Fresnel + Points), modificação de shader padrão via onBeforeCompile, plano de corte orientado pela câmera e fixo no modelo, separação em duas peças por renderização em duas passagens, modo aramado, pausa, animações por quadro (ciclo cardíaco, respiração, flagelos, sinapses).
 
 ### CRUD
 Apenas `doencas` tem CRUD completo. `entidades`, `partes`, `categorias` são read-only pela API (editadas via `dados-iniciais.js` + `npm run seed`).

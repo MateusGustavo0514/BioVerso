@@ -3,6 +3,8 @@ import { esc, mensagemErro } from '../util.js';
 import { Visualizador } from '../three/Visualizador.js';
 
 const NOME_RELACAO = { causa: 'Causa', afeta: 'Pode ser afetado por' };
+const INSTRUCAO_MODELO = 'Arraste para girar, use a roda do mouse para aproximar e clique numa parte. Botão direito no modelo: cortar em duas peças.';
+const INSTRUCAO_PECAS = 'Arraste uma peça para girá-la. Com Shift, arraste para movê-la. Botão direito na peça: juntar.';
 
 export async function paginaEspecime(raiz, slug) {
   raiz.innerHTML = `<section class="pagina"><p class="carregando">Carregando espécime…</p></section>`;
@@ -30,9 +32,13 @@ export async function paginaEspecime(raiz, slug) {
         <figure class="campo campo--especime">
           <div class="campo__palco" data-palco></div>
           <div class="dica-parte" data-dica hidden></div>
+          <div class="menu-modelo" data-menu role="menu" aria-label="Ações do modelo" hidden>
+            <button type="button" class="menu-modelo__item" role="menuitem" data-menu-separar></button>
+          </div>
           <div class="ferramentas" role="group" aria-label="Ferramentas do modelo 3D">
             <button type="button" class="ferramenta" data-pausar aria-pressed="false">Pausar</button>
             <button type="button" class="ferramenta" data-aramado aria-pressed="false">Aramado</button>
+            <button type="button" class="ferramenta ferramenta--reserva" data-separar aria-pressed="false">Separar peças</button>
             <label class="ferramenta ferramenta--corte">
               Corte
               <input type="range" min="0" max="1" step="0.01" value="0" data-corte />
@@ -41,7 +47,7 @@ export async function paginaEspecime(raiz, slug) {
           <figcaption class="campo__legenda">
             <span class="escala" aria-hidden="true"></span> ${esc(entidade.tamanho ?? '')}
           </figcaption>
-          <p class="campo__instrucao">Arraste para girar, use a roda do mouse para aproximar e clique numa parte.</p>
+          <p class="campo__instrucao" data-instrucao aria-live="polite">${INSTRUCAO_MODELO}</p>
         </figure>
 
         <div class="especime__info">
@@ -96,6 +102,20 @@ export async function paginaEspecime(raiz, slug) {
       : `<p class="parte-detalhe__vazio">Selecione uma parte no modelo ou na lista acima.</p>`;
   };
 
+  const menu = raiz.querySelector('[data-menu]');
+  const itemMenu = raiz.querySelector('[data-menu-separar]');
+  const fecharMenu = () => (menu.hidden = true);
+  const abrirMenu = (x, y) => {
+    itemMenu.textContent = visualizador.separado ? 'Juntar peças' : 'Cortar em duas peças';
+    menu.hidden = false;
+    // perto das bordas, o menu recua para não ser cortado pelo campo
+    const campo = menu.parentElement;
+    const esquerda = Math.min(x, campo.clientWidth - menu.offsetWidth - 8);
+    const topo = Math.min(y, campo.clientHeight - menu.offsetHeight - 8);
+    menu.style.transform = `translate(${esquerda}px, ${topo}px)`;
+    itemMenu.focus({ preventScroll: true });
+  };
+
   const visualizador = new Visualizador(raiz.querySelector('[data-palco]'), {
     aoPassar: (chave, x, y) => {
       if (!chave) return (dica.hidden = true);
@@ -104,6 +124,7 @@ export async function paginaEspecime(raiz, slug) {
       dica.style.transform = `translate(${x + 14}px, ${y + 14}px)`;
     },
     aoSelecionar: mostrarParte,
+    aoMenu: abrirMenu,
   });
 
   botoes.forEach((b) =>
@@ -124,7 +145,34 @@ export async function paginaEspecime(raiz, slug) {
   botaoPausar.setAttribute('aria-pressed', String(visualizador.pausado));
   botaoPausar.addEventListener('click', () => visualizador.pausar(alternar(botaoPausar)));
   botaoAramado.addEventListener('click', () => visualizador.definirAramado(alternar(botaoAramado)));
-  raiz.querySelector('[data-corte]').addEventListener('input', (e) => visualizador.definirCorte(Number(e.target.value)));
+
+  const botaoSeparar = raiz.querySelector('[data-separar]');
+  const barraCorte = raiz.querySelector('[data-corte]');
+  const instrucao = raiz.querySelector('[data-instrucao]');
+  const mostrarSeparacao = () => {
+    botaoSeparar.setAttribute('aria-pressed', String(visualizador.separado));
+    instrucao.textContent = visualizador.separado ? INSTRUCAO_PECAS : INSTRUCAO_MODELO;
+  };
+  const alternarSeparacao = () => {
+    visualizador.separar(!visualizador.separado);
+    barraCorte.value = visualizador.corte; // separar sem corte define um corte perto do meio
+    mostrarSeparacao();
+  };
+  botaoSeparar.addEventListener('click', alternarSeparacao);
+  itemMenu.addEventListener('click', () => {
+    alternarSeparacao();
+    fecharMenu();
+  });
+
+  // Fora da página do espécime estes ouvintes não existem: `abort()` os remove na limpeza
+  const ouvintes = new AbortController();
+  const { signal } = ouvintes;
+  document.addEventListener('pointerdown', (e) => menu.contains(e.target) || fecharMenu(), { signal });
+  document.addEventListener('keydown', (e) => e.key === 'Escape' && fecharMenu(), { signal });
+  barraCorte.addEventListener('input', (e) => {
+    visualizador.definirCorte(Number(e.target.value));
+    mostrarSeparacao(); // zerar a barra une as peças
+  });
 
   try {
     await visualizador.carregar(entidade);
@@ -132,5 +180,8 @@ export async function paginaEspecime(raiz, slug) {
     raiz.querySelector('[data-palco]').innerHTML = mensagemErro(erro);
   }
 
-  return () => visualizador.destruir();
+  return () => {
+    ouvintes.abort();
+    visualizador.destruir();
+  };
 }

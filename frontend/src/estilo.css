@@ -160,6 +160,7 @@ main:focus { outline: none; }
   position: absolute;
   left: 1.1rem;
   bottom: 0.9rem;
+  max-width: 55%;
   z-index: 3;
   display: flex;
   align-items: center;
@@ -178,10 +179,10 @@ main:focus { outline: none; }
 .campo__instrucao {
   position: absolute;
   right: 1.1rem;
-  top: 0.9rem;
+  bottom: 0.9rem;
   z-index: 3;
   margin: 0;
-  max-width: 22ch;
+  max-width: 30ch;
   text-align: right;
   color: #9dbcc2;
   font-family: var(--fonte-titulo);
@@ -232,6 +233,49 @@ main:focus { outline: none; }
 .ferramenta:hover { border-color: rgba(190, 230, 235, 0.6); }
 .ferramenta[aria-pressed='true'] { background: var(--eosina); border-color: var(--eosina); color: #fff; }
 .ferramenta--corte { cursor: default; }
+
+/* com mouse, o corte em duas peças fica no botão direito; o botão segue para teclado e toque */
+@media (hover: hover) {
+  .ferramenta--reserva:not(:focus-visible) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* menu do botão direito sobre o modelo */
+.menu-modelo {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 6;
+  padding: 0.3rem;
+  background: rgba(15, 40, 48, 0.94);
+  border: 1px solid rgba(190, 230, 235, 0.25);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.menu-modelo[hidden] { display: none; }
+.menu-modelo__item {
+  display: block;
+  width: 100%;
+  font: 500 0.88rem var(--fonte-titulo);
+  color: #d7e8ea;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.45rem 0.8rem;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.menu-modelo__item:hover,
+.menu-modelo__item:focus-visible { background: var(--eosina); color: #fff; }
 .ferramenta--corte input { width: 6.5rem; accent-color: var(--eosina); }
 
 /* ---------- Abertura (página inicial) ---------- */
