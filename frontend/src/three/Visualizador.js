@@ -183,6 +183,26 @@ export class Visualizador {
     this.#atualizarGiroAutomatico();
   }
 
+  /**
+   * Desenha o modelo já na pose final e devolve o canvas (miniaturas da página inicial).
+   * Copie a imagem na mesma tarefa: sem preserveDrawingBuffer, o quadro some depois.
+   */
+  fotografar() {
+    this.entrada = 1;
+    this.pivo?.scale.setScalar(1);
+    // enquadra o `foco` do modelo, quando há um: o bacilo aparece pelo corpo, não pelos flagelos
+    if (this.modelo?.foco) {
+      const raio = Math.max(this.semieixos.x, this.semieixos.y, this.semieixos.z);
+      const distancia = raio / Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) / 0.78;
+      const direcao = this.camera.position.clone().sub(this.controles.target).normalize();
+      this.controles.target.copy(this.centroCorte);
+      this.camera.position.copy(this.centroCorte).addScaledVector(direcao, distancia);
+    }
+    this.controles.update();
+    this.#desenhar();
+    return this.renderer.domElement;
+  }
+
   destruir() {
     this.renderer.setAnimationLoop(null);
     this.observador.disconnect();

@@ -53,6 +53,7 @@ bioverso/
         ├── router.js              # hash router minúsculo (sem lib)
         ├── api.js                 # cliente fetch da API
         ├── util.js                # esc(), mensagemErro(), mancha()
+        ├── tema.js                # modo claro/escuro: botão do topo, escolha salva, segue o sistema
         ├── estilo.css             # único arquivo de CSS (tudo global)
         ├── pages/
         │   ├── inicio.js          # home com destaque 3D + grades por categoria
@@ -60,6 +61,7 @@ bioverso/
         │   └── doencas.js         # lista e detalhe de doenças
         └── three/
             ├── Visualizador.js    # classe que encapsula cena, câmera, luzes, controles, raycasting, corte, aramado, pausa
+            ├── miniaturas.js      # fotografa cada modelo uma vez (Visualizador fora da tela) para os cartões da home
             ├── shaders/fresnel.js # ShaderMaterial GLSL próprio (halo das membranas)
             ├── utils/geometria.js # criarAleatorio (mulberry32), deformarComRuido, pontosFibonacci, cilindroEntre, marcarParte
             └── modelos/
@@ -186,13 +188,15 @@ Cada página exporta uma função `async (raiz, ...params) => limparOpcional`. S
 
 ### Páginas
 
-- **inicio.js**: hero com o coronavírus girando sozinho + três coleções (`<ul class="laminas">`) com cartões no formato 3:1 de lâmina de microscópio.
+- **inicio.js**: hero com um modelo girando sozinho e setas para alternar entre todos os espécimes (começa no coronavírus; legenda, contador e botão "Explorar" acompanham), + três coleções (`<ul class="laminas">`) com cartões no formato 3:1 de lâmina de microscópio. Cada cartão mostra uma foto do modelo 3D gerada por `miniaturas.js` depois do destaque; até ela ficar pronta, a `mancha()` colorida ocupa o lugar.
 - **especime.js**: grid com o Visualizador à esquerda (sticky), e à direita texto + lista de partes clicáveis + doenças relacionadas (seções "Causa" e "Pode ser afetado por") + curiosidades. Barra de ferramentas sobre o campo: **Pausar**, **Aramado**, **Corte** (range 0–1). O corte em duas peças fica no menu do botão direito sobre o modelo (`Cortar em duas peças` / `Juntar peças`); o botão **Separar peças** continua na barra só para teclado e toque (`.ferramenta--reserva`).
 - **doencas.js**: lista simples; detalhe com transmissão/sintomas/prevenção e as entidades relacionadas agrupadas por relação.
 
 ### Estilo
 
 Identidade visual: lâminas de histologia (coloração H&E, roxo + rosa) e o campo circular do microscópio. Está em `estilo.css` (único arquivo). Variáveis CSS em `:root` (`--vidro`, `--lamina`, `--tinta`, `--hematoxilina`, `--eosina`, `--palco`…). Tipografia: Bricolage Grotesque (títulos) + Source Serif 4 (texto).
+
+**Modo escuro**: `:root[data-tema='escuro']` redefine as mesmas variáveis. Use sempre variáveis para cor de texto, fundo e borda fora do campo 3D (nada de hex fixo), ou a peça nova fica clara no tema escuro. O roxo tem dois papéis: `--hematoxilina` para links e `--acao` para fundo de botão com texto branco. O script no `<head>` do `index.html` aplica o tema antes da primeira pintura; `tema.js` cuida do botão e da escolha salva em `localStorage` (chave `bioverso-tema`).
 
 Regras importantes:
 - Toda inserção de texto vindo da API usa `esc()` de `util.js`. Sem exceção — é como evitamos XSS sem framework.
@@ -223,6 +227,7 @@ vis.pausar(true|false);         // liga/desliga animação + autoRotate
 vis.definirAramado(true|false); // wireframe nos materiais standard
 vis.definirCorte(0..1);         // plano de clipping fixo no modelo, orientado pela câmera ao sair do 0 (0 = sem corte)
 vis.separar(true|false);        // true: parte em duas peças no plano de corte (sem corte, corta perto do meio); false: junta e zera o corte
+vis.fotografar();               // desenha na pose final e devolve o canvas (copie a imagem na mesma tarefa); enquadra o `foco` se houver
 vis.destruir();                 // dispose completo; chame ao sair da página
 ```
 

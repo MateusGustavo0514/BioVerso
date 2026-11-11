@@ -12,6 +12,15 @@
       rel="stylesheet"
     />
     <title>BioVerso</title>
+    <script>
+      // aplica o tema antes da primeira pintura, para a página não piscar no tema errado (ver src/tema.js)
+      try {
+        document.documentElement.dataset.tema =
+          localStorage.getItem('bioverso-tema') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro');
+      } catch {
+        document.documentElement.dataset.tema = matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro';
+      }
+    </script>
   </head>
   <body>
     <a class="pular" href="#conteudo">Pular para o conteúdo</a>
@@ -30,6 +39,15 @@
         <a href="#/#orgao">Órgãos</a>
         <a href="#/doencas">Doenças</a>
       </nav>
+      <button type="button" class="tema" data-botao-tema aria-pressed="false" aria-label="Modo escuro" title="Alternar modo escuro">
+        <svg class="tema__lua" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+        </svg>
+        <svg class="tema__sol" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2" />
+          <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </button>
     </header>
 
     <main id="conteudo" tabindex="-1"></main>

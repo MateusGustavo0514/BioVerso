@@ -9,12 +9,39 @@
   --hematoxilina: #4a3c8c; /* corante roxo: links e ações */
   --eosina: #c94f7c;       /* corante rosa: acentos */
   --linha: #c6d4d2;
+  --acao: #4a3c8c;         /* fundo de botões, sempre com texto branco */
+  --acao-forte: #3b2f73;
+  --etiqueta: #dfe7e5;     /* etiqueta fosca das lâminas */
+  --listra: rgba(23, 50, 59, 0.05);
+  --vidro-claro: rgba(255, 255, 255, 0.9);
+  --vidro-fosco: rgba(230, 240, 240, 0.6);
+  --aviso-fundo: #fbeef3;
 
   --fonte-titulo: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
   --fonte-texto: 'Source Serif 4', Georgia, 'Times New Roman', serif;
 
   --raio-lamina: 6px;
   --largura: 1200px;
+}
+
+/* Modo escuro: as mesmas variáveis, com outros valores. O campo 3D já é escuro e não muda.
+   O roxo se divide: links clareiam para ler no fundo escuro, botões (texto branco) ficam fechados.
+   A eosina continua igual: clarear derrubaria o contraste do texto branco nos botões ativos. */
+:root[data-tema='escuro'] {
+  color-scheme: dark;
+  --vidro: #0b171b;
+  --lamina: #12232a;
+  --tinta: #e2edef;
+  --tinta-suave: #9fb8bf;
+  --hematoxilina: #a497f0;
+  --linha: #26414a;
+  --acao: #5a49b8;
+  --acao-forte: #6b5ad0;
+  --etiqueta: #1a2e35;
+  --listra: rgba(226, 237, 239, 0.04);
+  --vidro-claro: rgba(30, 52, 60, 0.9);
+  --vidro-fosco: rgba(18, 35, 42, 0.6);
+  --aviso-fundo: #3a1c29;
 }
 
 *,
@@ -90,9 +117,29 @@ a:hover { text-decoration-thickness: 2px; }
   text-decoration: none;
 }
 .marca__icone { width: 1.7rem; height: 1.7rem; color: var(--tinta); }
-.topo nav { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
+.topo nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
 .topo nav a { color: var(--tinta); text-decoration: none; font-weight: 500; }
 .topo nav a:hover { color: var(--hematoxilina); text-decoration: underline; }
+
+/* botão de tema: mostra a lua no claro e o sol no escuro */
+.tema {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  color: var(--tinta);
+  background: var(--lamina);
+  border: 1px solid var(--linha);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.tema:hover { border-color: var(--hematoxilina); color: var(--hematoxilina); }
+.tema svg { width: 1.15rem; height: 1.15rem; }
+.tema__sol,
+:root[data-tema='escuro'] .tema__lua { display: none; }
+:root[data-tema='escuro'] .tema__sol { display: block; }
 
 main { max-width: var(--largura); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2.5rem); }
 main:focus { outline: none; }
@@ -111,14 +158,14 @@ main:focus { outline: none; }
 .botao {
   display: inline-block;
   padding: 0.8rem 1.4rem;
-  background: var(--hematoxilina);
+  background: var(--acao);
   color: #fff;
   font-family: var(--fonte-titulo);
   font-weight: 600;
   text-decoration: none;
   border-radius: 999px;
 }
-.botao:hover { background: #3b2f73; }
+.botao:hover { background: var(--acao-forte); }
 
 /* ---------- Campo do microscópio (o elemento marcante) ---------- */
 .campo {
@@ -290,6 +337,39 @@ main:focus { outline: none; }
 .abertura__lead { font-size: 1.2rem; max-width: 38ch; color: var(--tinta-suave); margin-bottom: 1.75rem; }
 .campo--abertura { aspect-ratio: 1 / 1; max-height: 78vh; }
 
+/* setas do destaque: alternam o modelo mostrado no campo */
+.carrossel__seta {
+  position: absolute;
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  color: #d7e8ea;
+  background: rgba(15, 40, 48, 0.72);
+  border: 1px solid rgba(190, 230, 235, 0.25);
+  border-radius: 50%;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.carrossel__seta[hidden] { display: none; }
+.carrossel__seta:hover { border-color: rgba(190, 230, 235, 0.6); background: rgba(15, 40, 48, 0.9); }
+.carrossel__seta svg { width: 1.3rem; height: 1.3rem; }
+.carrossel__seta--anterior { left: 1rem; }
+.carrossel__seta--proximo { right: 1rem; }
+.carrossel__contador {
+  position: absolute;
+  right: 1.1rem;
+  top: 0.9rem;
+  z-index: 3;
+  margin: 0;
+  color: #9dbcc2;
+  font: 500 0.85rem var(--fonte-titulo);
+}
+
 /* ---------- Coleções e lâminas ---------- */
 .colecao { padding: 2.5rem 0 1rem; border-top: 1px solid var(--linha); }
 .colecao__cabecalho { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 1.25rem; margin-bottom: 1.5rem; }
@@ -322,8 +402,8 @@ main:focus { outline: none; }
   gap: 0.2rem;
   padding: 0.75rem;
   background:
-    repeating-linear-gradient(135deg, rgba(23, 50, 59, 0.05) 0 2px, transparent 2px 6px),
-    #dfe7e5;
+    repeating-linear-gradient(135deg, var(--listra) 0 2px, transparent 2px 6px),
+    var(--etiqueta);
   border-radius: var(--raio-lamina) 0 0 var(--raio-lamina);
   border: 1px solid var(--linha);
   border-right: none;
@@ -333,13 +413,23 @@ main:focus { outline: none; }
 .lamina__vidro {
   display: grid;
   place-items: center;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(230, 240, 240, 0.6));
+  background: linear-gradient(160deg, var(--vidro-claro), var(--vidro-fosco));
   border: 1px solid var(--linha);
   border-radius: 0 var(--raio-lamina) var(--raio-lamina) 0;
 }
 .lamina__resumo { grid-column: 1 / -1; padding: 0.6rem 0.1rem 0; font-size: 0.95rem; color: var(--tinta-suave); }
 .lamina:hover .lamina__nome { color: var(--hematoxilina); text-decoration: underline; }
-.lamina:hover .mancha { scale: 1.08; }
+.lamina:hover .mancha,
+.lamina:hover .lamina__modelo { scale: 1.08; }
+
+/* foto do modelo 3D, gerada em miniaturas.js; até ela ficar pronta, a mancha ocupa o lugar */
+.lamina__modelo {
+  display: block;
+  height: 7.2rem;
+  aspect-ratio: 1;
+  object-fit: contain;
+  transition: scale 0.25s ease;
+}
 
 .mancha {
   display: inline-block;
@@ -381,7 +471,7 @@ main:focus { outline: none; }
   cursor: pointer;
 }
 .parte:hover { border-color: var(--hematoxilina); }
-.parte[aria-pressed='true'] { background: var(--hematoxilina); border-color: var(--hematoxilina); color: #fff; }
+.parte[aria-pressed='true'] { background: var(--acao); border-color: var(--acao); color: #fff; }
 
 .parte-detalhe {
   padding: 1rem 1.1rem;
@@ -424,7 +514,7 @@ main:focus { outline: none; }
 
 /* ---------- Estados ---------- */
 .carregando { color: var(--tinta-suave); padding: 2rem 0; }
-.aviso { padding: 1rem 1.2rem; background: #fbeef3; border-left: 4px solid var(--eosina); border-radius: 0 var(--raio-lamina) var(--raio-lamina) 0; color: var(--tinta); }
+.aviso { padding: 1rem 1.2rem; background: var(--aviso-fundo); border-left: 4px solid var(--eosina); border-radius: 0 var(--raio-lamina) var(--raio-lamina) 0; color: var(--tinta); }
 .aviso p { margin: 0; }
 .aviso__titulo { font-family: var(--fonte-titulo); font-weight: 700; }
 .campo .aviso { position: relative; z-index: 5; margin: 1rem; }
