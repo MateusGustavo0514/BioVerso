@@ -3,6 +3,8 @@ import { criarBacilo } from './bacilo.js';
 import { criarCoco } from './coco.js';
 import { criarCoracao } from './coracao.js';
 import { criarPulmoes } from './pulmoes.js';
+import { criarBala } from './bala.js';
+import { criarFilamento } from './filamento.js';
 
 // A coluna `modelo_tipo` do banco escolhe qual gerador usar.
 // Para adicionar um novo modelo: crie o arquivo, registre aqui e cadastre no banco.
@@ -12,6 +14,8 @@ const geradores = {
   coco: criarCoco,
   coracao: criarCoracao,
   pulmoes: criarPulmoes,
+  bala: criarBala,
+  filamento: criarFilamento,
 };
 
 export function criarModelo(tipo, params = {}, cores) {

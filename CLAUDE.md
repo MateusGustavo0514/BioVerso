@@ -65,8 +65,11 @@ bioverso/
             ├── shaders/fresnel.js # ShaderMaterial GLSL próprio (halo das membranas)
             ├── utils/geometria.js # criarAleatorio (mulberry32), deformarComRuido, pontosFibonacci, cilindroEntre, marcarParte
             └── modelos/
-                ├── index.js       # registro { virus, bacilo, coco, coracao, pulmoes, cerebro }
-                ├── virus.js
+                ├── index.js       # registro { virus, bacilo, coco, coracao, pulmoes, bala, filamento }
+                ├── virus.js       # partícula esférica/icosaédrica genérica (10 dos 14 modelos usam este gerador)
+                ├── genomas.js     # interiores por `nucleo.tipo`: novelo, segmentado, helicoidal, conico, icosaedrico
+                ├── bala.js        # vírus em bala (raiva): LatheGeometry + hélice que segue o perfil
+                ├── filamento.js   # vírus filamentoso (Ebola): tubo em curva, espículas por referenciais de Frenet
                 ├── bacilo.js
                 ├── coco.js
                 ├── coracao.js
@@ -125,7 +128,7 @@ doencas (slug, nome, resumo, descricao, transmissao, sintomas, prevencao)
 ### Conceitos importantes
 
 - **entidade** = qualquer coisa com modelo 3D (um vírus, uma bactéria ou um órgão). Categoria decide onde ela aparece.
-- **modelo_tipo** = string que escolhe o gerador procedural no front (`virus`, `bacilo`, `coco`, `coracao`, `pulmoes`, `cerebro`). Precisa bater com uma chave de `frontend/src/three/modelos/index.js`.
+- **modelo_tipo** = string que escolhe o gerador procedural no front (`virus`, `bacilo`, `coco`, `coracao`, `pulmoes`, `bala`, `filamento`). Precisa bater com uma chave de `frontend/src/three/modelos/index.js`.
 - **modelo_params** = JSON serializado com parâmetros específicos daquele gerador (número de espículas, batimentos por minuto, profundidade dos sulcos…). Fica como TEXT no banco e é parseado em `routes/index.js` por `lerParams()`.
 - **modelo_url** = opcional. Se preenchido, o Visualizador carrega um `.glb` de `/models/<arquivo>.glb` em vez de usar o gerador procedural. O nome de cada mesh do .glb vira a chave da parte clicável.
 - **partes.chave** = string que precisa bater com `userData.parte` da mesh correspondente no Three.js. É assim que o raycasting liga uma mesh ao seu texto.
@@ -237,6 +240,7 @@ vis.destruir();                 // dispose completo; chame ao sair da página
 - O **corte** usa `renderer.localClippingEnabled = true` e um `THREE.Plane` cuja normal aponta para a câmera no momento em que a barra sai do 0 e depois fica fixa, para o usuário girar em volta do modelo cortado. Voltar a barra para 0 libera a orientação. As faces de trás ficam mais escuras por um trecho de GLSL injetado via `onBeforeCompile` em `#prepararMateriais()`.
 - **Peças separadas**: não há geometria duplicada. Em `#desenhar()`, a cena é renderizada duas vezes por quadro (`autoClear = false`), cada uma com a matriz da peça no pivô e o plano invertido e transformado em `planoDesenho`, o plano que os materiais usam. `planoCorte` guarda o corte original. O raycasting testa as duas poses. O halo fica oculto enquanto as peças estão abertas. O `pointerdown` usa fase de captura para decidir antes do `OrbitControls` se o arraste é da peça ou da câmera.
 - **Raycasting**: cada mesh clicável é marcada com `marcarParte(mesh, 'chave')`, que seta `userData.parte`. O método `#parteSobPonteiro` sobe pelo pai até achar essa marca, e prefere mesh opaca a transparente (importante para os brônquios dentro do pulmão translúcido).
+- **Lado do material**: `#prepararMateriais()` força `DoubleSide` em todos os materiais, exceto os marcados com `material.userData.manterLado = true` (as cavidades do coração, malhas viradas do avesso que só devem mostrar a face interna).
 - **Halo** usa shader próprio e `raycast = () => {}` (não captura clique) + `renderOrder = 10`.
 - **Enquadramento**: `#enquadrar()` calcula a esfera envolvente, centraliza o modelo e ajusta `camera.position`, `near`, `far`, `minDistance`, `maxDistance`. Guarda `this.semieixos` para o corte (o alcance da barra é a profundidade do modelo na direção da câmera).
 - **Animação de entrada**: scale de 0.6→1.0 com easing `easeOutCubic`.
@@ -290,17 +294,22 @@ export function criarXxx(params, cores) {
 
 Depois registre em `modelos/index.js` com o mesmo nome usado em `modelo_tipo` no banco.
 
+**Interior dos vírus**: em vez de um gerador por vírus, `virus.js` monta a partícula e `genomas.js` monta o interior descrito em `modelo_params.nucleo` (`tipo` + parâmetros + `chave*` para as partes). Um `icosaedrico` aceita `interior` com outro `nucleo`, o que dá camadas concêntricas (rotavírus: VP7 → VP6 → VP2 → segmentos). Para um vírus esférico novo, normalmente basta cadastrar a entidade com `modelo_tipo: 'virus'` e um `nucleo` existente, sem código.
+
 ### Técnicas por arquivo (para citar na apresentação)
 
 | Arquivo | Técnicas |
 |---|---|
 | `utils/geometria.js` | PRNG com semente (mulberry32), ruído simplex 3D, `mergeVertices`, espiral de Fibonacci na esfera, cilindro orientado entre dois pontos, novelo de curva Catmull-Rom (aberto ou fechado), esferas instanciadas, marcação de parte |
 | `shaders/fresnel.js` | ShaderMaterial GLSL próprio (efeito Fresnel), blending aditivo, uniforms animados |
-| `virus.js` | Esfera deformada por ruído, InstancedMesh para espículas, distribuição Fibonacci + jitter aleatório, quaternion para orientar instâncias, "respiração" animada, genoma opcional por `nucleo.tipo`: novelo Catmull-Rom + super-hélice com referenciais de Frenet + contas instanciadas (coronavírus); bastões em grampo de dupla hélice no arranjo 7 + 1 (influenza) |
+| `virus.js` | Esfera deformada por ruído ou casca icosaédrica facetada (`envelope.facetado`), InstancedMesh para espículas (cabeça simples, trimérica com `lobulos: 3`, ou proteína `deitada` da dengue), capsômeros pentaméricos em estrela (HPV), distribuição Fibonacci + jitter aleatório, quaternion para orientar instâncias, camada de matriz, "respiração" animada. O interior é delegado a `genomas.js` por `nucleo.tipo` |
+| `genomas.js` | Interiores reutilizáveis: `novelo` (Catmull-Rom + super-hélice com referenciais de Frenet, aberto ou fechado, com fita dupla parcial para a hepatite B), `segmentado` (bastões em grampo no arranjo n + 1: influenza 8, rotavírus 11), `helicoidal` (nucleocapsídeo contínuo dobrado, sarampo), `conico` (LatheGeometry + hexâmeros por `MeshSurfaceSampler`, HIV), `icosaedrico` (casca facetada, capsômeros nos vértices únicos via `mergeVertices`, pentons × hexons por `setColorAt`, e `interior` aninhado para camadas concêntricas) |
+| `bala.js` | Superfície de revolução (`LatheGeometry`) com perfil em bala, espículas distribuídas por `MeshSurfaceSampler` com rejeição na ponta chata, curva própria (`HeliceEmBala`) que acompanha o perfil, camada de matriz |
+| `filamento.js` | Tubo ao longo de curva Catmull-Rom centrípeta, pontas fechadas por `mergeGeometries`, espículas posicionadas pelos referenciais de Frenet do trajeto, nucleocapsídeo helicoidal pela mesma curva (`helicePelaCurva`) |
 | `bacilo.js` | CapsuleGeometry, curva paramétrica própria (Hélice) + TubeGeometry para flagelos, hierarquia pivô/inclinação/giro, InstancedMesh para fímbrias com normais da superfície, interior visível no corte: membrana interna, DNA circular em curva fechada, plasmídeos e ribossomos por amostragem com rejeição |
 | `coco.js` | Empacotamento esférico aleatório sem sobreposição, InstancedMesh com cores por instância (`setColorAt`), oscilação individual, interior instanciado por célula (membrana, nucleoide reaproveitado em orientações sorteadas, ribossomos) |
-| `coracao.js` | Deformação de esferas, CatmullRomCurve3 + TubeGeometry para vasos, pulso gaussiano para ciclo cardíaco (átrios contraem antes dos ventrículos) |
-| `pulmoes.js` | Remodelagem vértice-a-vértice para forma anatômica (incisura cardíaca, base no diafragma), árvore brônquica recursiva (fractal), TorusGeometry parcial para anéis de cartilagem, material semitransparente com `DoubleSide` |
+| `coracao.js` | Massa ventricular única remodelada vértice a vértice (cone com ápice) e dividida pelo plano do septo em duas malhas, cavidades viradas do avesso (só a face interna aparece no corte; `userData.manterLado`), coronária extraída dos vértices do sulco, valvas com cúspides em dobradiça animadas pelo ciclo, CatmullRomCurve3 + TubeGeometry para os grandes vasos, pulso gaussiano para o ciclo cardíaco (átrios contraem antes dos ventrículos) |
+| `pulmoes.js` | Remodelagem vértice-a-vértice para forma anatômica (incisura cardíaca, base no diafragma), árvore brônquica recursiva (fractal) a partir dos brônquios lobares (3 lobos à direita, 2 à esquerda), artérias e veias que seguem os ramos (deslocamento por Gram-Schmidt), cachos de alvéolos instanciados nas pontas, TorusGeometry parcial para anéis de cartilagem, material semitransparente com `DoubleSide` |
 | `cerebro.js` | Ruído em crista (`(1-|noise|)^7`) para sulcos estreitos, lâminas horizontais no cerebelo, `MeshSurfaceSampler` para distribuir pontos na superfície, Points com shader próprio para "sinapses" piscando |
 
 ### Como adicionar um modelo novo (receita)
@@ -329,13 +338,13 @@ Depois registre em `modelos/index.js` com o mesmo nome usado em `modelo_tipo` no
 
 ## 10. O que já está pronto
 
-### Entidades (7)
-- **Vírus**: SARS-CoV-2, Influenza A
-- **Bactérias**: *Escherichia coli*, *Staphylococcus aureus*
-- **Órgãos**: Coração, Pulmões, Encéfalo
+### Entidades (14)
+- **Vírus (10)**: SARS-CoV-2, Influenza A, HIV, dengue, rotavírus, HPV, hepatite B, raiva, sarampo, Ebola
+- **Bactérias (2)**: *Escherichia coli*, *Staphylococcus aureus*
+- **Órgãos (2)**: Coração, Pulmões (o Encéfalo e o `cerebro.js` citados em versões anteriores deste arquivo nunca foram implementados)
 
-### Doenças (7)
-COVID-19, Gripe, Pneumonia, Infecção urinária, Intoxicação alimentar, Infarto agudo do miocárdio, AVC
+### Doenças (14)
+COVID-19, Gripe, Pneumonia, Infecção urinária, Intoxicação alimentar, Infarto agudo do miocárdio, HIV e aids, Dengue, Diarreia por rotavírus, Infecção pelo HPV, Hepatite B, Raiva, Sarampo, Doença pelo vírus Ebola
 
 ### Features de CG implementadas
 Iluminação PBR + IBL, raycasting com hover/clique, geometria procedural com ruído, ruído em crista, InstancedMesh, árvore fractal, curvas paramétricas, TubeGeometry, MeshSurfaceSampler, shaders GLSL próprios (Fresnel + Points), modificação de shader padrão via onBeforeCompile, plano de corte orientado pela câmera e fixo no modelo, separação em duas peças por renderização em duas passagens, modo aramado, pausa, animações por quadro (ciclo cardíaco, respiração, flagelos, sinapses).

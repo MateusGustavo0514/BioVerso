@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { criarAleatorio, deformarComRuido, cilindroEntre, marcarParte } from '../utils/geometria.js';
+import { criarAleatorio, deformarComRuido, cilindroEntre, esferasInstanciadas, marcarParte } from '../utils/geometria.js';
 
 /**
  * Formata uma esfera unitária no formato de um pulmão.
@@ -30,28 +30,54 @@ function geometriaPulmao(lado, semente) {
   return deformarComRuido(geo, { amplitude: 0.035, frequencia: 1.8, semente });
 }
 
-/** Árvore brônquica recursiva: cada ramo se divide em dois, menor e mais fino. */
-function geometriaArvore({ inicio, direcao, comprimento, raio, profundidade, centro, limites, aleatorio, saida }) {
+/**
+ * Árvore brônquica recursiva: cada ramo se divide em dois, menor e mais fino.
+ * `ramos` guarda cada segmento, para os vasos e os alvéolos seguirem a mesma árvore.
+ */
+function geometriaArvore({ inicio, direcao, comprimento, raio, profundidade, centro, limites, aleatorio, saida, ramos }) {
   const fim = inicio.clone().addScaledVector(direcao, comprimento);
   const rel = fim.clone().sub(centro);
   const dentro = (rel.x / limites.x) ** 2 + (rel.y / limites.y) ** 2 + (rel.z / limites.z) ** 2 < 1;
   if (!dentro) return;
 
   saida.push(cilindroEntre(inicio, fim, raio, raio * 0.75, 8));
+  const ramo = { inicio, fim, raio, terminal: true };
+  ramos.push(ramo);
   if (profundidade === 0) return;
 
+  const antes = ramos.length;
   for (const sinal of [-1, 1]) {
     const eixo = new THREE.Vector3().crossVectors(direcao, new THREE.Vector3(aleatorio() - 0.5, aleatorio() - 0.5, aleatorio() - 0.5)).normalize();
     const novaDirecao = direcao.clone().applyAxisAngle(eixo, sinal * (0.3 + aleatorio() * 0.3)).normalize();
     geometriaArvore({
       inicio: fim, direcao: novaDirecao, comprimento: comprimento * (0.7 + aleatorio() * 0.12),
-      raio: raio * 0.72, profundidade: profundidade - 1, centro, limites, aleatorio, saida,
+      raio: raio * 0.72, profundidade: profundidade - 1, centro, limites, aleatorio, saida, ramos,
     });
   }
+  ramo.terminal = ramos.length === antes; // nenhum filho coube no pulmão: é a ponta de um bronquíolo
+}
+
+/**
+ * Vasos que acompanham os brônquios: a artéria corre de um lado e a veia do outro.
+ * O lado é a direção "para a frente" sem a componente do ramo (Gram-Schmidt), então
+ * muda pouco de um segmento para o seguinte e o vaso não se quebra nas bifurcações.
+ */
+function geometriaVasos(ramos, sinal, espessura) {
+  const frente = new THREE.Vector3(0, 0, 1);
+  return mergeGeometries(
+    ramos.map(({ inicio, fim, raio }) => {
+      const direcao = fim.clone().sub(inicio).normalize();
+      const lado = frente.clone().addScaledVector(direcao, -frente.dot(direcao)).normalize().multiplyScalar(sinal * raio * 1.6);
+      return cilindroEntre(inicio.clone().add(lado), fim.clone().add(lado), raio * espessura, raio * espessura * 0.78, 6);
+    })
+  );
 }
 
 export function criarPulmoes(params, cores) {
-  const { respiracoesPorMinuto = 14, ramificacoes = 5, semente = 5 } = params;
+  const {
+    respiracoesPorMinuto = 14, ramificacoes = 5, semente = 5,
+    corArteria = '#4f6fc0', corVeia = '#c8423f', corAlveolo = '#f6a9b9',
+  } = params;
   const aleatorio = criarAleatorio(semente);
   const grupo = new THREE.Group();
 
@@ -65,6 +91,7 @@ export function criarPulmoes(params, cores) {
       transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide,
     });
   const materialVia = new THREE.MeshPhysicalMaterial({ color: corCartilagem, roughness: 0.4, clearcoat: 0.6 });
+  const materialVaso = (cor) => new THREE.MeshPhysicalMaterial({ color: cor, roughness: 0.4, clearcoat: 0.5 });
 
   // Traqueia com anéis de cartilagem em "C" (TorusGeometry com arco incompleto)
   const traqueia = new THREE.Group();
@@ -97,19 +124,43 @@ export function criarPulmoes(params, cores) {
     // Brônquio principal + árvore dentro do pulmão
     const hilo = new THREE.Vector3(lado * 0.4, 0.4, 0);
     const pedacos = [cilindroEntre(carina, hilo, 0.09, 0.075, 12)];
-    geometriaArvore({
-      inicio: hilo,
-      direcao: new THREE.Vector3(lado * 0.6, -1, 0).normalize(),
-      comprimento: 0.36,
-      raio: 0.065,
-      profundidade: ramificacoes,
-      centro,
-      limites: new THREE.Vector3(0.68, 1.1, 0.56).multiplyScalar(escalaLado),
-      aleatorio,
-      saida: pedacos,
-    });
+    const ramos = [{ inicio: carina, fim: hilo, raio: 0.09, terminal: false }];
+    // Um brônquio lobar para cada lobo: três no pulmão direito, dois no esquerdo
+    const lobares = lado < 0
+      ? [[0.45, 0.9, 0], [1, -0.15, 0.25], [0.5, -1, -0.1]] // superior, médio, inferior
+      : [[0.55, 0.85, 0], [0.55, -1, 0]]; // superior, inferior
+    for (const [x, y, z] of lobares) {
+      geometriaArvore({
+        inicio: hilo,
+        direcao: new THREE.Vector3(lado * x, y, z).normalize(),
+        comprimento: 0.3,
+        raio: 0.055,
+        profundidade: ramificacoes,
+        centro,
+        limites: new THREE.Vector3(0.68, 1.1, 0.56).multiplyScalar(escalaLado),
+        aleatorio,
+        saida: pedacos,
+        ramos,
+      });
+    }
     const arvore = new THREE.Mesh(mergeGeometries(pedacos), materialVia);
     conjunto.add(marcarParte(arvore, 'bronquios'));
+
+    // Interior: artérias (sangue pobre em oxigênio, azul) de um lado dos brônquios, veias do outro
+    conjunto.add(
+      marcarParte(new THREE.Mesh(geometriaVasos(ramos, 1, 0.7), materialVaso(corArteria)), 'arterias_pulmonares'),
+      marcarParte(new THREE.Mesh(geometriaVasos(ramos, -1, 0.62), materialVaso(corVeia)), 'veias_pulmonares')
+    );
+
+    // Alvéolos: um cacho na ponta de cada bronquíolo (cada esfera representa milhares de alvéolos reais)
+    const cachos = ramos.filter((r) => r.terminal).flatMap(({ inicio, fim }) => {
+      const centroCacho = fim.clone().addScaledVector(fim.clone().sub(inicio).normalize(), 0.035);
+      return Array.from({ length: 7 }, () => {
+        const desvio = new THREE.Vector3(aleatorio() - 0.5, aleatorio() - 0.5, aleatorio() - 0.5).normalize();
+        return centroCacho.clone().addScaledVector(desvio, 0.032 * Math.sqrt(aleatorio()));
+      });
+    });
+    conjunto.add(marcarParte(esferasInstanciadas(cachos, 0.026, corAlveolo, aleatorio, 10), 'alveolos'));
 
     grupo.add(conjunto);
     lados.push(conjunto);

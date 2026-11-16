@@ -107,8 +107,12 @@ Nenhum modelo é baixado pronto: todos são gerados por código, o que deixa as 
 | Distribuição uniforme em esfera (espiral de Fibonacci) | `virus.js` |
 | Instanciamento na GPU (`InstancedMesh`): espículas, fímbrias, anéis, cocos | `virus.js`, `bacilo.js`, `pulmoes.js`, `coco.js` |
 | Curvas paramétricas (hélice, Catmull-Rom, super-hélice com referenciais de Frenet) e extrusão de tubos | `virus.js`, `bacilo.js`, `coracao.js`, `cerebro.js` |
-| Estrutura recursiva (fractal) da árvore brônquica | `pulmoes.js` |
-| Amostragem de pontos na superfície da malha | `cerebro.js` |
+| Estrutura recursiva (fractal) da árvore brônquica, a partir dos brônquios lobares; vasos e alvéolos derivados dos mesmos ramos | `pulmoes.js` |
+| Malha dividida por um plano (septo), cavidades com malha virada do avesso e valvas em dobradiça animadas pelo ciclo cardíaco | `coracao.js` |
+| Amostragem de pontos na superfície da malha (`MeshSurfaceSampler`): espículas da raiva, hexâmeros do capsídeo do HIV | `bala.js`, `genomas.js` |
+| Capsídeo icosaédrico: `IcosahedronGeometry` facetado, capsômeros nos vértices únicos (pentons e hexons por cor de instância) e camadas concêntricas aninhadas | `genomas.js`, `virus.js` |
+| Superfície de revolução (`LatheGeometry`): capsídeo cônico do HIV e partícula em bala da raiva | `genomas.js`, `bala.js` |
+| Referenciais de Frenet ao longo de curvas: super-hélices dos genomas e espículas do vírus filamentoso | `genomas.js`, `filamento.js` |
 | Shaders GLSL próprios: efeito Fresnel e pontos animados | `fresnel.js`, `cerebro.js` |
 | Modificação do shader padrão via `onBeforeCompile` (faces internas escurecidas) | `Visualizador.js` |
 | Plano de corte (clipping) orientado pela câmera e fixo no modelo, permitindo girar a peça cortada | `Visualizador.js` |

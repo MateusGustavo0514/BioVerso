@@ -525,7 +525,9 @@ export class Visualizador {
   #prepararMateriais() {
     this.#paraCadaMaterial((mat) => {
       mat.clippingPlanes = [this.planoDesenho];
-      mat.side = THREE.DoubleSide; // o corte revela o interior das malhas
+      // o corte revela o interior das malhas; `userData.manterLado` preserva o lado escolhido pelo
+      // gerador (cavidades do coração, viradas do avesso, só mostram a face de dentro)
+      if (!mat.userData.manterLado) mat.side = THREE.DoubleSide;
       mat.wireframe = this.aramado;
       mat.onBeforeCompile = escurecerFacesInternas;
       mat.needsUpdate = true;
