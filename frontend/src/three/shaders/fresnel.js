@@ -43,10 +43,29 @@ export function criarMaterialFresnel({ cor = '#9fd3ff', intensidade = 1.0, poten
   });
 }
 
-/** Cria a esfera de halo. Ela não recebe cliques (raycast desativado). */
-export function criarHalo(raio, opcoes) {
-  const halo = new THREE.Mesh(new THREE.SphereGeometry(raio, 64, 48), criarMaterialFresnel(opcoes));
+function prepararHalo(geometria, opcoes) {
+  const halo = new THREE.Mesh(geometria, criarMaterialFresnel(opcoes));
   halo.raycast = () => {};
   halo.renderOrder = 10;
   return halo;
+}
+
+/** Cria a esfera de halo. Ela não recebe cliques (raycast desativado). */
+export function criarHalo(raio, opcoes) {
+  return prepararHalo(new THREE.SphereGeometry(raio, 64, 48), opcoes);
+}
+
+/**
+ * Halo com a forma de um corpo alongado (bastão, espiral): cópia da geometria inflada ao longo
+ * das normais. Uma esfera ou elipsoide seria furada pelas pontas, e o brilho aditivo pararia
+ * de somar onde o corpo sai da casca, deixando uma linha escura.
+ */
+export function criarHaloDaForma(geometria, margem, opcoes) {
+  const geo = geometria.clone();
+  const pos = geo.attributes.position;
+  const nor = geo.attributes.normal;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setXYZ(i, pos.getX(i) + nor.getX(i) * margem, pos.getY(i) + nor.getY(i) * margem, pos.getZ(i) + nor.getZ(i) * margem);
+  }
+  return prepararHalo(geo, opcoes);
 }

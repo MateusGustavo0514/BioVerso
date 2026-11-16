@@ -65,12 +65,14 @@ bioverso/
             ├── shaders/fresnel.js # ShaderMaterial GLSL próprio (halo das membranas)
             ├── utils/geometria.js # criarAleatorio (mulberry32), deformarComRuido, pontosFibonacci, cilindroEntre, marcarParte
             └── modelos/
-                ├── index.js       # registro { virus, bacilo, coco, coracao, pulmoes, bala, filamento }
+                ├── index.js       # registro { virus, bacilo, coco, coracao, pulmoes, bala, filamento, espiral, diplococo }
                 ├── virus.js       # partícula esférica/icosaédrica genérica (10 dos 14 modelos usam este gerador)
                 ├── genomas.js     # interiores por `nucleo.tipo`: novelo, segmentado, helicoidal, conico, icosaedrico
                 ├── bala.js        # vírus em bala (raiva): LatheGeometry + hélice que segue o perfil
                 ├── filamento.js   # vírus filamentoso (Ebola): tubo em curva, espículas por referenciais de Frenet
-                ├── bacilo.js
+                ├── bacilo.js      # bastão: E. coli, tuberculose (parede cerosa), tétano (esporo terminal)
+                ├── espiral.js     # curvas e espiraladas: Vibrio, H. pylori, Leptospira, Treponema
+                ├── diplococo.js   # pares de cocos com cápsula: pneumococo, meningococo
                 ├── coco.js
                 ├── coracao.js
                 ├── pulmoes.js
@@ -128,7 +130,7 @@ doencas (slug, nome, resumo, descricao, transmissao, sintomas, prevencao)
 ### Conceitos importantes
 
 - **entidade** = qualquer coisa com modelo 3D (um vírus, uma bactéria ou um órgão). Categoria decide onde ela aparece.
-- **modelo_tipo** = string que escolhe o gerador procedural no front (`virus`, `bacilo`, `coco`, `coracao`, `pulmoes`, `bala`, `filamento`). Precisa bater com uma chave de `frontend/src/three/modelos/index.js`.
+- **modelo_tipo** = string que escolhe o gerador procedural no front (`virus`, `bacilo`, `coco`, `coracao`, `pulmoes`, `bala`, `filamento`, `espiral`, `diplococo`). Precisa bater com uma chave de `frontend/src/three/modelos/index.js`.
 - **modelo_params** = JSON serializado com parâmetros específicos daquele gerador (número de espículas, batimentos por minuto, profundidade dos sulcos…). Fica como TEXT no banco e é parseado em `routes/index.js` por `lerParams()`.
 - **modelo_url** = opcional. Se preenchido, o Visualizador carrega um `.glb` de `/models/<arquivo>.glb` em vez de usar o gerador procedural. O nome de cada mesh do .glb vira a chave da parte clicável.
 - **partes.chave** = string que precisa bater com `userData.parte` da mesh correspondente no Three.js. É assim que o raycasting liga uma mesh ao seu texto.
@@ -301,12 +303,14 @@ Depois registre em `modelos/index.js` com o mesmo nome usado em `modelo_tipo` no
 | Arquivo | Técnicas |
 |---|---|
 | `utils/geometria.js` | PRNG com semente (mulberry32), ruído simplex 3D, `mergeVertices`, espiral de Fibonacci na esfera, cilindro orientado entre dois pontos, novelo de curva Catmull-Rom (aberto ou fechado), esferas instanciadas, marcação de parte |
-| `shaders/fresnel.js` | ShaderMaterial GLSL próprio (efeito Fresnel), blending aditivo, uniforms animados |
+| `shaders/fresnel.js` | ShaderMaterial GLSL próprio (efeito Fresnel), blending aditivo, uniforms animados; `criarHaloDaForma` infla a geometria do corpo ao longo das normais para halos de corpos alongados |
 | `virus.js` | Esfera deformada por ruído ou casca icosaédrica facetada (`envelope.facetado`), InstancedMesh para espículas (cabeça simples, trimérica com `lobulos: 3`, ou proteína `deitada` da dengue), capsômeros pentaméricos em estrela (HPV), distribuição Fibonacci + jitter aleatório, quaternion para orientar instâncias, camada de matriz, "respiração" animada. O interior é delegado a `genomas.js` por `nucleo.tipo` |
 | `genomas.js` | Interiores reutilizáveis: `novelo` (Catmull-Rom + super-hélice com referenciais de Frenet, aberto ou fechado, com fita dupla parcial para a hepatite B), `segmentado` (bastões em grampo no arranjo n + 1: influenza 8, rotavírus 11), `helicoidal` (nucleocapsídeo contínuo dobrado, sarampo), `conico` (LatheGeometry + hexâmeros por `MeshSurfaceSampler`, HIV), `icosaedrico` (casca facetada, capsômeros nos vértices únicos via `mergeVertices`, pentons × hexons por `setColorAt`, e `interior` aninhado para camadas concêntricas) |
 | `bala.js` | Superfície de revolução (`LatheGeometry`) com perfil em bala, espículas distribuídas por `MeshSurfaceSampler` com rejeição na ponta chata, curva própria (`HeliceEmBala`) que acompanha o perfil, camada de matriz |
 | `filamento.js` | Tubo ao longo de curva Catmull-Rom centrípeta, pontas fechadas por `mergeGeometries`, espículas posicionadas pelos referenciais de Frenet do trajeto, nucleocapsídeo helicoidal pela mesma curva (`helicePelaCurva`) |
-| `bacilo.js` | CapsuleGeometry, curva paramétrica própria (Hélice) + TubeGeometry para flagelos, hierarquia pivô/inclinação/giro, InstancedMesh para fímbrias com normais da superfície, interior visível no corte: membrana interna, DNA circular em curva fechada, plasmídeos e ribossomos por amostragem com rejeição |
+| `bacilo.js` | CapsuleGeometry, curva paramétrica própria (Hélice) + TubeGeometry para flagelos, hierarquia pivô/inclinação/giro, InstancedMesh para fímbrias com normais da superfície, interior visível no corte: membrana interna, DNA circular em curva fechada, plasmídeos e ribossomos por amostragem com rejeição. Opcionais: `parede` (camada intermediária), `inclusoes`, `aspecto: 'ceroso'`, `particulas` (toxinas instanciadas: anel AB5 ou cadeia) e `esporo` terminal (LatheGeometry com a união suave do perfil da célula e do esporo, e capa, córtex e núcleo concêntricos) |
+| `espiral.js` | Eixo (arco plano ou reta com ganchos) + hélice enrolada nele por `curvaSuperHelice`, tubo com pontas fechadas, referenciais de Frenet para pôr nucleoide (laço de ida e volta, um ou dois cromossomos), ribossomos, pili e partículas na seção transversal, endoflagelos no periplasma (espiroquetas), flagelos polares com bainha e bulbo, giro em saca-rolhas, halo com a forma do corpo |
+| `diplococo.js` | Função de molde que remodela a esfera (lança do pneumococo, grão de café do meningococo) e também os pontos do interior, células giradas 180° (sem espelhar) e unidas por `mergeGeometries`, cadeia curta de pares, septo, cápsula semitransparente, pili tipo IV por Catmull-Rom, vesículas de membrana externa |
 | `coco.js` | Empacotamento esférico aleatório sem sobreposição, InstancedMesh com cores por instância (`setColorAt`), oscilação individual, interior instanciado por célula (membrana, nucleoide reaproveitado em orientações sorteadas, ribossomos) |
 | `coracao.js` | Massa ventricular única remodelada vértice a vértice (cone com ápice) e dividida pelo plano do septo em duas malhas, cavidades viradas do avesso (só a face interna aparece no corte; `userData.manterLado`), coronária extraída dos vértices do sulco, valvas com cúspides em dobradiça animadas pelo ciclo, CatmullRomCurve3 + TubeGeometry para os grandes vasos, pulso gaussiano para o ciclo cardíaco (átrios contraem antes dos ventrículos) |
 | `pulmoes.js` | Remodelagem vértice-a-vértice para forma anatômica (incisura cardíaca, base no diafragma), árvore brônquica recursiva (fractal) a partir dos brônquios lobares (3 lobos à direita, 2 à esquerda), artérias e veias que seguem os ramos (deslocamento por Gram-Schmidt), cachos de alvéolos instanciados nas pontas, TorusGeometry parcial para anéis de cartilagem, material semitransparente com `DoubleSide` |
@@ -338,13 +342,13 @@ Depois registre em `modelos/index.js` com o mesmo nome usado em `modelo_tipo` no
 
 ## 10. O que já está pronto
 
-### Entidades (14)
+### Entidades (22)
 - **Vírus (10)**: SARS-CoV-2, Influenza A, HIV, dengue, rotavírus, HPV, hepatite B, raiva, sarampo, Ebola
-- **Bactérias (2)**: *Escherichia coli*, *Staphylococcus aureus*
+- **Bactérias (10)**: *Escherichia coli*, *Staphylococcus aureus*, *Mycobacterium tuberculosis*, *Vibrio cholerae*, *Helicobacter pylori*, *Leptospira interrogans*, *Treponema pallidum*, *Streptococcus pneumoniae*, *Clostridium tetani*, *Neisseria meningitidis*
 - **Órgãos (2)**: Coração, Pulmões (o Encéfalo e o `cerebro.js` citados em versões anteriores deste arquivo nunca foram implementados)
 
-### Doenças (14)
-COVID-19, Gripe, Pneumonia, Infecção urinária, Intoxicação alimentar, Infarto agudo do miocárdio, HIV e aids, Dengue, Diarreia por rotavírus, Infecção pelo HPV, Hepatite B, Raiva, Sarampo, Doença pelo vírus Ebola
+### Doenças (21)
+COVID-19, Gripe, Pneumonia, Infecção urinária, Intoxicação alimentar, Infarto agudo do miocárdio, HIV e aids, Dengue, Diarreia por rotavírus, Infecção pelo HPV, Hepatite B, Raiva, Sarampo, Doença pelo vírus Ebola, Tuberculose, Cólera, Gastrite e úlcera péptica, Tétano, Meningite bacteriana, Leptospirose, Sífilis
 
 ### Features de CG implementadas
 Iluminação PBR + IBL, raycasting com hover/clique, geometria procedural com ruído, ruído em crista, InstancedMesh, árvore fractal, curvas paramétricas, TubeGeometry, MeshSurfaceSampler, shaders GLSL próprios (Fresnel + Points), modificação de shader padrão via onBeforeCompile, plano de corte orientado pela câmera e fixo no modelo, separação em duas peças por renderização em duas passagens, modo aramado, pausa, animações por quadro (ciclo cardíaco, respiração, flagelos, sinapses).
@@ -360,7 +364,7 @@ Em ordem crescente de esforço:
 
 1. **Página de busca** usando `GET /api/entidades?busca=` (filtro já existe no backend).
 2. **Mais órgãos**: rim, fígado, estômago, olho. Cada um é uma oportunidade de técnica nova (rim = cortes anatômicos; olho = refração; fígado = subsurface scattering).
-3. **Mais agentes**: *Mycobacterium tuberculosis* (bacilo), rotavírus (icosaedro geométrico sem envelope), fungo *Candida* (hifas por L-system).
+3. **Mais agentes**: fungo *Candida* (hifas por L-system), protozoários como o *Plasmodium* (malária) ou o *Trypanosoma cruzi* (doença de Chagas).
 4. **Modo comparação**: dois modelos lado a lado com câmera sincronizada.
 5. **Pós-processamento** com `EffectComposer`: bloom nos halos, SSAO nas dobras do cérebro, outline na parte selecionada.
 6. **Painel admin** com login simples (JWT ou sessão) para cadastrar entidades e doenças pela UI.

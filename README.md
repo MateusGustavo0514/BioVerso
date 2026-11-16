@@ -85,10 +85,10 @@ Uma **entidade** é qualquer coisa com modelo 3D (vírus, bactéria ou órgão).
 
 | Categoria | Modelos |
 |---|---|
-| Vírus | SARS-CoV-2, Influenza A |
-| Bactérias | *Escherichia coli* (bacilo com flagelos), *Staphylococcus aureus* (cocos em cacho) |
-| Órgãos | Coração (com ciclo cardíaco), pulmões (com respiração e árvore brônquica), encéfalo (com sulcos e atividade elétrica) |
-| Doenças | COVID-19, gripe, pneumonia, infecção urinária, intoxicação alimentar, infarto, AVC |
+| Vírus (10) | SARS-CoV-2, Influenza A, HIV, dengue, rotavírus, HPV, hepatite B, raiva (em bala), sarampo, Ebola (filamentoso) |
+| Bactérias (10) | *Escherichia coli* (bacilo com flagelos), *Staphylococcus aureus* (cocos em cacho), *Mycobacterium tuberculosis* (parede cerosa), *Vibrio cholerae* (vírgula), *Helicobacter pylori* (hélice com tufo de flagelos), *Leptospira interrogans* e *Treponema pallidum* (espiroquetas com endoflagelos), *Streptococcus pneumoniae* e *Neisseria meningitidis* (diplococos com cápsula), *Clostridium tetani* (esporo terminal) |
+| Órgãos (2) | Coração (com ciclo cardíaco), pulmões (com respiração e árvore brônquica) |
+| Doenças (21) | COVID-19, gripe, pneumonia, infecção urinária, intoxicação alimentar, infarto, HIV e aids, dengue, diarreia por rotavírus, infecção pelo HPV, hepatite B, raiva, sarampo, Ebola, tuberculose, cólera, gastrite e úlcera péptica, tétano, meningite bacteriana, leptospirose, sífilis |
 
 Os textos são educativos e resumidos. Revisem com fontes oficiais (OMS, Ministério da Saúde) antes da entrega.
 
@@ -101,19 +101,20 @@ Nenhum modelo é baixado pronto: todos são gerados por código, o que deixa as 
 | Pipeline de renderização WebGL, câmera perspectiva, tone mapping ACES e espaço de cor sRGB | `Visualizador.js` |
 | Iluminação: direcional, pontual, hemisférica e ambiente baseada em imagem (PMREM) | `Visualizador.js` |
 | Materiais físicos (PBR): rugosidade, clearcoat, sheen, transparência | todos os modelos |
-| Grafo de cena e transformações hierárquicas (flagelo: pivô → inclinação → giro) | `bacilo.js` |
+| Grafo de cena e transformações hierárquicas (flagelo: pivô → inclinação → giro) | `bacilo.js`, `espiral.js` |
 | Geometria procedural: deformação de vértices por ruído simplex 3D | `geometria.js`, `pulmoes.js`, `cerebro.js` |
 | Ruído em crista (ridged noise) para giros e sulcos | `cerebro.js` |
 | Distribuição uniforme em esfera (espiral de Fibonacci) | `virus.js` |
-| Instanciamento na GPU (`InstancedMesh`): espículas, fímbrias, anéis, cocos | `virus.js`, `bacilo.js`, `pulmoes.js`, `coco.js` |
+| Instanciamento na GPU (`InstancedMesh`): espículas, fímbrias, anéis, cocos, ribossomos, toxinas | `virus.js`, `bacilo.js`, `espiral.js`, `pulmoes.js`, `coco.js` |
 | Curvas paramétricas (hélice, Catmull-Rom, super-hélice com referenciais de Frenet) e extrusão de tubos | `virus.js`, `bacilo.js`, `coracao.js`, `cerebro.js` |
 | Estrutura recursiva (fractal) da árvore brônquica, a partir dos brônquios lobares; vasos e alvéolos derivados dos mesmos ramos | `pulmoes.js` |
 | Malha dividida por um plano (septo), cavidades com malha virada do avesso e valvas em dobradiça animadas pelo ciclo cardíaco | `coracao.js` |
 | Amostragem de pontos na superfície da malha (`MeshSurfaceSampler`): espículas da raiva, hexâmeros do capsídeo do HIV | `bala.js`, `genomas.js` |
 | Capsídeo icosaédrico: `IcosahedronGeometry` facetado, capsômeros nos vértices únicos (pentons e hexons por cor de instância) e camadas concêntricas aninhadas | `genomas.js`, `virus.js` |
-| Superfície de revolução (`LatheGeometry`): capsídeo cônico do HIV e partícula em bala da raiva | `genomas.js`, `bala.js` |
-| Referenciais de Frenet ao longo de curvas: super-hélices dos genomas e espículas do vírus filamentoso | `genomas.js`, `filamento.js` |
-| Shaders GLSL próprios: efeito Fresnel e pontos animados | `fresnel.js`, `cerebro.js` |
+| Superfície de revolução (`LatheGeometry`): capsídeo cônico do HIV, partícula em bala da raiva e bacilo com esporo terminal (união suave de dois perfis por máximo suave) | `genomas.js`, `bala.js`, `bacilo.js` |
+| Referenciais de Frenet ao longo de curvas: super-hélices dos genomas, espículas do vírus filamentoso e corpo das bactérias espiraladas (tubo enrolado num eixo, com ganchos na Leptospira; endoflagelos, nucleoide e ribossomos posicionados na seção transversal) | `genomas.js`, `filamento.js`, `espiral.js` |
+| Remodelagem de vértices por uma função de molde (célula em lança ou em grão de café), aplicada à malha e aos pontos do interior, e geometrias de várias células unidas por `mergeGeometries` | `diplococo.js` |
+| Shaders GLSL próprios: efeito Fresnel (halo esférico ou com a forma do corpo, pela malha inflada ao longo das normais) | `fresnel.js` |
 | Modificação do shader padrão via `onBeforeCompile` (faces internas escurecidas) | `Visualizador.js` |
 | Plano de corte (clipping) orientado pela câmera e fixo no modelo, permitindo girar a peça cortada | `Visualizador.js` |
 | Renderização em duas passagens: o modelo é partido em duas peças sem duplicar geometria, com plano de corte invertido e transformado por matriz | `Visualizador.js` |
@@ -121,7 +122,7 @@ Nenhum modelo é baixado pronto: todos são gerados por código, o que deixa as 
 | Modo aramado (wireframe) | `Visualizador.js` |
 | Raycasting para seleção de partes com o mouse | `Visualizador.js` |
 | Animação por quadro: ciclo cardíaco, respiração, flagelos, pulsos | modelos |
-| Blending aditivo e ordem de renderização para transparência | `fresnel.js`, `pulmoes.js` |
+| Blending aditivo e ordem de renderização para transparência | `fresnel.js`, `pulmoes.js`, `diplococo.js` |
 
 ## Como adicionar um modelo
 
