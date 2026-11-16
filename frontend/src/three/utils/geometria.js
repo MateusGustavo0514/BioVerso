@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createNoise3D } from 'simplex-noise';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeVertices, mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /** Gerador pseudoaleatório com semente (mulberry32): o mesmo modelo sai igual toda vez. */
 export function criarAleatorio(semente = 1) {
@@ -108,4 +108,180 @@ export function cilindroEntre(inicio, fim, raioInicio, raioFim, segmentos = 8) {
 export function marcarParte(objeto, chave) {
   objeto.userData.parte = chave;
   return objeto;
+}
+
+/** Separa os triângulos de uma malha pelos dois lados de um plano: uma superfície só, duas partes clicáveis. */
+export function dividirPorPlano(geo, normal, limite) {
+  const pos = geo.attributes.position;
+  const indices = geo.index.array;
+  const [lado, outro] = [[], []];
+  const centro = new THREE.Vector3();
+  const vertice = new THREE.Vector3();
+  for (let i = 0; i < indices.length; i += 3) {
+    centro.set(0, 0, 0);
+    for (let k = 0; k < 3; k++) centro.add(vertice.fromBufferAttribute(pos, indices[i + k]));
+    (centro.divideScalar(3).dot(normal) > limite ? lado : outro).push(indices[i], indices[i + 1], indices[i + 2]);
+  }
+  return [lado, outro].map((lista) => geo.clone().setIndex(lista));
+}
+
+/**
+ * Separa os triângulos de uma malha por uma função da posição do centro do triângulo.
+ * `classificar(centro)` devolve o número da peça (0, 1, 2...). Todas as peças usam a mesma superfície.
+ */
+export function dividirPorRegiao(geo, quantidade, classificar) {
+  const pos = geo.attributes.position;
+  const indices = geo.index.array;
+  const listas = Array.from({ length: quantidade }, () => []);
+  const centro = new THREE.Vector3();
+  const vertice = new THREE.Vector3();
+  for (let i = 0; i < indices.length; i += 3) {
+    centro.set(0, 0, 0);
+    for (let k = 0; k < 3; k++) centro.add(vertice.fromBufferAttribute(pos, indices[i + k]));
+    listas[classificar(centro.divideScalar(3))].push(indices[i], indices[i + 1], indices[i + 2]);
+  }
+  return listas.map((lista) => geo.clone().setIndex(lista));
+}
+
+/** Vira a malha do avesso (ordem dos vértices e normais): a face visível passa a ser a de dentro. */
+export function virarParaDentro(geo) {
+  const indices = geo.index.array;
+  for (let i = 0; i < indices.length; i += 3) [indices[i + 1], indices[i + 2]] = [indices[i + 2], indices[i + 1]];
+  const normais = geo.attributes.normal.array;
+  for (let i = 0; i < normais.length; i++) normais[i] = -normais[i];
+  return geo;
+}
+
+/**
+ * Tubo de raio variável ao longo de uma curva (esôfago, estômago, intestino, ureter, osso...).
+ * Diferente do TubeGeometry, o raio é uma função `raio(u, t)` e há uma modulação opcional
+ * `modulacao(u, ângulo, t)` (pregas, vilosidades...). As posições são recalculadas por `atualizar(t)`,
+ * o que permite animar ondas de contração (peristaltismo) sem shader próprio.
+ *
+ * Opção `paraDentro`: vira a malha do avesso (revestimento interno, só a face de dentro aparece).
+ * Devolve também `pontoNaSecao(u, ângulo, fator)`, para pôr outros objetos na parede do tubo.
+ */
+export function tuboDeRaioVariavel(curva, { raio, modulacao = null, segmentos = 80, lados = 32, paraDentro = false } = {}) {
+  const quadros = curva.computeFrenetFrames(segmentos, false);
+  const centros = Array.from({ length: segmentos + 1 }, (_, i) => curva.getPointAt(i / segmentos));
+  const geometria = new THREE.BufferGeometry();
+  const posicoes = new THREE.BufferAttribute(new Float32Array((segmentos + 1) * lados * 3), 3);
+  geometria.setAttribute('position', posicoes);
+
+  // mesma convenção do TubeGeometry: vértice = centro + raio * (-cos(a) * normal + sen(a) * binormal)
+  const direcao = (i, angulo, alvo) =>
+    alvo.copy(quadros.normals[i]).multiplyScalar(-Math.cos(angulo)).addScaledVector(quadros.binormals[i], Math.sin(angulo));
+
+  const indices = [];
+  for (let j = 1; j <= segmentos; j++) {
+    for (let i = 0; i < lados; i++) {
+      const i1 = (i + 1) % lados;
+      const a = (j - 1) * lados + i;
+      const b = j * lados + i;
+      const c = j * lados + i1;
+      const d = (j - 1) * lados + i1;
+      if (paraDentro) indices.push(a, d, b, b, d, c);
+      else indices.push(a, b, d, b, c, d);
+    }
+  }
+  geometria.setIndex(indices);
+
+  const dir = new THREE.Vector3();
+  function atualizar(t = 0) {
+    for (let j = 0; j <= segmentos; j++) {
+      const u = j / segmentos;
+      const r = raio(u, t);
+      for (let i = 0; i < lados; i++) {
+        const angulo = (i / lados) * Math.PI * 2;
+        const fator = r * (modulacao ? modulacao(u, angulo, t) : 1);
+        direcao(j, angulo, dir);
+        posicoes.setXYZ(j * lados + i, centros[j].x + dir.x * fator, centros[j].y + dir.y * fator, centros[j].z + dir.z * fator);
+      }
+    }
+    posicoes.needsUpdate = true;
+    geometria.computeVertexNormals();
+    geometria.attributes.normal.needsUpdate = true;
+  }
+  atualizar(0);
+
+  const quadroA = new THREE.Vector3();
+  function pontoNaSecao(u, angulo, fator = 1, alvo = new THREE.Vector3()) {
+    const x = Math.min(Math.max(u, 0), 1) * segmentos;
+    const i = Math.min(Math.floor(x), segmentos - 1);
+    const f = x - i;
+    const r = raio(u, 0) * fator;
+    alvo.copy(centros[i]).lerp(centros[i + 1], f);
+    direcao(i, angulo, quadroA);
+    alvo.addScaledVector(quadroA, r * (1 - f));
+    direcao(i + 1, angulo, quadroA);
+    return alvo.addScaledVector(quadroA, r * f);
+  }
+  /** Direção radial (para fora) na seção `u`, no ângulo dado. */
+  function direcaoNaSecao(u, angulo, alvo = new THREE.Vector3()) {
+    const i = Math.min(Math.round(Math.min(Math.max(u, 0), 1) * segmentos), segmentos);
+    return direcao(i, angulo, alvo);
+  }
+  const tangenteNaSecao = (u, alvo = new THREE.Vector3()) => alvo.copy(curva.getTangentAt(Math.min(Math.max(u, 0), 1)));
+
+  return { geometria, atualizar, pontoNaSecao, direcaoNaSecao, tangenteNaSecao, segmentos, lados };
+}
+
+/**
+ * Fatia um tubo de `tuboDeRaioVariavel` em trechos (por exemplo fundo, corpo e antro do estômago).
+ * `fracoes` = [0, 0.3, 0.7, 1]. Os trechos dividem os mesmos vértices, então a animação e as
+ * normais continuam sem emenda entre eles.
+ */
+export function fatiarTubo(tubo, fracoes) {
+  const { geometria, segmentos, lados } = tubo;
+  const todos = geometria.index.array;
+  const fatias = [];
+  for (let k = 0; k < fracoes.length - 1; k++) {
+    const de = Math.round(fracoes[k] * segmentos) * lados * 6;
+    const ate = Math.round(fracoes[k + 1] * segmentos) * lados * 6;
+    const fatia = new THREE.BufferGeometry();
+    fatia.setAttribute('position', geometria.attributes.position);
+    fatia.setAttribute('normal', geometria.attributes.normal);
+    fatia.setIndex(Array.from(todos.slice(de, ate)));
+    fatias.push(fatia);
+  }
+  return fatias;
+}
+
+/**
+ * Árvore recursiva de ramos (vasos, ductos): cada ramo se divide em `filhos`, menores e mais finos,
+ * e só existe enquanto a ponta cabe dentro do volume (`dentro(ponto)`). Devolve a lista de ramos
+ * `{ inicio, fim, raio, terminal }`; use `geometriaDosRamos` para virar malha.
+ */
+export function arvoreRamificada({
+  inicio, direcao, comprimento, raio, profundidade, dentro, aleatorio, ramos = [],
+  abertura = 0.4, reducaoComprimento = 0.75, reducaoRaio = 0.72, filhos = 2,
+}) {
+  const fim = inicio.clone().addScaledVector(direcao, comprimento);
+  if (!dentro(fim)) return ramos;
+  const ramo = { inicio, fim, raio, terminal: true };
+  ramos.push(ramo);
+  if (profundidade === 0) return ramos;
+  const antes = ramos.length;
+  for (let k = 0; k < filhos; k++) {
+    const sinal = filhos === 2 ? (k === 0 ? -1 : 1) : 1;
+    const eixo = new THREE.Vector3().crossVectors(direcao, new THREE.Vector3(aleatorio() - 0.5, aleatorio() - 0.5, aleatorio() - 0.5)).normalize();
+    const nova = direcao.clone().applyAxisAngle(eixo, sinal * (abertura * 0.7 + aleatorio() * abertura * 0.7)).normalize();
+    arvoreRamificada({
+      inicio: fim, direcao: nova, comprimento: comprimento * (reducaoComprimento + (aleatorio() - 0.5) * 0.12),
+      raio: raio * reducaoRaio, profundidade: profundidade - 1, dentro, aleatorio, ramos, abertura, reducaoComprimento, reducaoRaio, filhos,
+    });
+  }
+  ramo.terminal = ramos.length === antes;
+  return ramos;
+}
+
+/** Malha única com um cilindro por ramo. `deslocamento(ramo)` devolve um vetor para afastar o vaso do eixo. */
+export function geometriaDosRamos(ramos, { espessura = 1, lados = 8, deslocamento = null } = {}) {
+  const pedacos = ramos.map((ramo) => {
+    const desloc = deslocamento ? deslocamento(ramo) : null;
+    const a = desloc ? ramo.inicio.clone().add(desloc) : ramo.inicio;
+    const b = desloc ? ramo.fim.clone().add(desloc) : ramo.fim;
+    return cilindroEntre(a, b, ramo.raio * espessura, ramo.raio * espessura * 0.78, lados);
+  });
+  return mergeGeometries(pedacos);
 }

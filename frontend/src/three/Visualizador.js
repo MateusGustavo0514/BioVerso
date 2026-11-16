@@ -500,8 +500,13 @@ export class Visualizador {
     if (!this.modelo) return;
     this.modelo.objeto.traverse((o) => {
       const mat = o.material;
-      if (!o.isMesh || !mat?.emissive) return;
       const chave = o.userData.parte;
+      // nuvens de pontos com shader próprio (sinapses) destacam-se por um uniform, não pelo emissivo
+      if (o.isPoints && mat?.uniforms?.uDestaque) {
+        mat.uniforms.uDestaque.value = chave && (chave === this.parteHover || chave === this.parteSelecionada) ? 1 : 0;
+        return;
+      }
+      if (!o.isMesh || !mat?.emissive) return;
       if (chave && chave === this.parteHover) {
         mat.emissive.set('#ffffff');
         mat.emissiveIntensity = 0.22;
@@ -531,6 +536,13 @@ export class Visualizador {
       mat.wireframe = this.aramado;
       mat.onBeforeCompile = escurecerFacesInternas;
       mat.needsUpdate = true;
+    });
+    // pontos com shader próprio entram no corte se o material declarar `userData.recortavel`
+    // (o GLSL precisa incluir os trechos de clipping do Three.js)
+    this.modelo?.objeto.traverse((o) => {
+      if (!o.isPoints || !o.material.userData.recortavel) return;
+      o.material.clippingPlanes = [this.planoDesenho];
+      o.material.needsUpdate = true;
     });
   }
 

@@ -7,6 +7,14 @@ import { criarBala } from './bala.js';
 import { criarFilamento } from './filamento.js';
 import { criarEspiral } from './espiral.js';
 import { criarDiplococo } from './diplococo.js';
+import { criarEstomago } from './estomago.js';
+import { criarIntestino } from './intestino.js';
+import { criarFigado } from './figado.js';
+import { criarRim } from './rim.js';
+import { criarOlho } from './olho.js';
+import { criarPele } from './pele.js';
+import { criarOsso } from './osso.js';
+import { criarCerebro } from './cerebro.js';
 
 // A coluna `modelo_tipo` do banco escolhe qual gerador usar.
 // Para adicionar um novo modelo: crie o arquivo, registre aqui e cadastre no banco.
@@ -20,6 +28,14 @@ const geradores = {
   filamento: criarFilamento,
   espiral: criarEspiral,
   diplococo: criarDiplococo,
+  estomago: criarEstomago,
+  intestino: criarIntestino,
+  figado: criarFigado,
+  rim: criarRim,
+  olho: criarOlho,
+  pele: criarPele,
+  osso: criarOsso,
+  cerebro: criarCerebro,
 };
 
 export function criarModelo(tipo, params = {}, cores) {

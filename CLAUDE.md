@@ -63,9 +63,9 @@ bioverso/
             ├── Visualizador.js    # classe que encapsula cena, câmera, luzes, controles, raycasting, corte, aramado, pausa
             ├── miniaturas.js      # fotografa cada modelo uma vez (Visualizador fora da tela) para os cartões da home
             ├── shaders/fresnel.js # ShaderMaterial GLSL próprio (halo das membranas)
-            ├── utils/geometria.js # criarAleatorio (mulberry32), deformarComRuido, pontosFibonacci, cilindroEntre, marcarParte
+            ├── utils/geometria.js # criarAleatorio (mulberry32), deformarComRuido, pontosFibonacci, cilindroEntre, marcarParte, tuboDeRaioVariavel, arvoreRamificada, dividirPorPlano/Regiao, virarParaDentro
             └── modelos/
-                ├── index.js       # registro { virus, bacilo, coco, coracao, pulmoes, bala, filamento, espiral, diplococo }
+                ├── index.js       # registro { virus, bacilo, coco, coracao, pulmoes, bala, filamento, espiral, diplococo, estomago, intestino, figado, rim, cerebro, olho, pele, osso }
                 ├── virus.js       # partícula esférica/icosaédrica genérica (10 dos 14 modelos usam este gerador)
                 ├── genomas.js     # interiores por `nucleo.tipo`: novelo, segmentado, helicoidal, conico, icosaedrico
                 ├── bala.js        # vírus em bala (raiva): LatheGeometry + hélice que segue o perfil
@@ -76,7 +76,14 @@ bioverso/
                 ├── coco.js
                 ├── coracao.js
                 ├── pulmoes.js
-                └── cerebro.js
+                ├── estomago.js    # esôfago, estômago (fundo/corpo/antro/piloro), duodeno; peristaltismo
+                ├── intestino.js   # intestino delgado: tubo em alças, pregas circulares e vilosidades
+                ├── figado.js      # fígado, vesícula, vasos (porta, artéria, veias hepáticas, ductos) e lóbulos
+                ├── rim.js         # rim em corte anatômico, ureter com peristaltismo, vasos, suprarrenal
+                ├── cerebro.js     # encéfalo (modelo_tipo `cerebro`): lobos, cerebelo, tronco, estruturas profundas, sinapses
+                ├── olho.js        # globo ocular com córnea refratora, íris, cristalino, retina e vasos
+                ├── pele.js        # bloco de pele em camadas com folículo, glândulas, vasos e receptores
+                └── osso.js        # fêmur: diáfise, epífises, osso esponjoso e canal medular
 ```
 
 Arquivos que **não devem** ser criados sem motivo forte: `tsconfig.json`, `.prettierrc`, `.eslintrc`, pastas `src/components`, `src/hooks`, `src/types`. A simplicidade é feature.
@@ -130,7 +137,7 @@ doencas (slug, nome, resumo, descricao, transmissao, sintomas, prevencao)
 ### Conceitos importantes
 
 - **entidade** = qualquer coisa com modelo 3D (um vírus, uma bactéria ou um órgão). Categoria decide onde ela aparece.
-- **modelo_tipo** = string que escolhe o gerador procedural no front (`virus`, `bacilo`, `coco`, `coracao`, `pulmoes`, `bala`, `filamento`, `espiral`, `diplococo`). Precisa bater com uma chave de `frontend/src/three/modelos/index.js`.
+- **modelo_tipo** = string que escolhe o gerador procedural no front (`virus`, `bacilo`, `coco`, `coracao`, `pulmoes`, `bala`, `filamento`, `espiral`, `diplococo`, `estomago`, `intestino`, `figado`, `rim`, `cerebro`, `olho`, `pele`, `osso`). Precisa bater com uma chave de `frontend/src/three/modelos/index.js`.
 - **modelo_params** = JSON serializado com parâmetros específicos daquele gerador (número de espículas, batimentos por minuto, profundidade dos sulcos…). Fica como TEXT no banco e é parseado em `routes/index.js` por `lerParams()`.
 - **modelo_url** = opcional. Se preenchido, o Visualizador carrega um `.glb` de `/models/<arquivo>.glb` em vez de usar o gerador procedural. O nome de cada mesh do .glb vira a chave da parte clicável.
 - **partes.chave** = string que precisa bater com `userData.parte` da mesh correspondente no Three.js. É assim que o raycasting liga uma mesh ao seu texto.
@@ -238,7 +245,7 @@ vis.destruir();                 // dispose completo; chame ao sair da página
 
 ### Decisões de design que não devem ser quebradas
 
-- Materiais devem ser `MeshStandardMaterial` ou `MeshPhysicalMaterial` para funcionar com corte/aramado/destaque emissivo. ShaderMaterials (como o halo) ficam fora dessas transformações, por design.
+- Materiais devem ser `MeshStandardMaterial` ou `MeshPhysicalMaterial` para funcionar com corte/aramado/destaque emissivo. ShaderMaterials (como o halo) ficam fora dessas transformações, por design. Exceção: `THREE.Points` com `material.userData.recortavel = true` entra no corte (o GLSL inclui `clipping_planes_*` e o material tem `clipping: true`), e um `uniform uDestaque` serve de destaque no lugar do emissivo (sinapses do encéfalo).
 - O **corte** usa `renderer.localClippingEnabled = true` e um `THREE.Plane` cuja normal aponta para a câmera no momento em que a barra sai do 0 e depois fica fixa, para o usuário girar em volta do modelo cortado. Voltar a barra para 0 libera a orientação. As faces de trás ficam mais escuras por um trecho de GLSL injetado via `onBeforeCompile` em `#prepararMateriais()`.
 - **Peças separadas**: não há geometria duplicada. Em `#desenhar()`, a cena é renderizada duas vezes por quadro (`autoClear = false`), cada uma com a matriz da peça no pivô e o plano invertido e transformado em `planoDesenho`, o plano que os materiais usam. `planoCorte` guarda o corte original. O raycasting testa as duas poses. O halo fica oculto enquanto as peças estão abertas. O `pointerdown` usa fase de captura para decidir antes do `OrbitControls` se o arraste é da peça ou da câmera.
 - **Raycasting**: cada mesh clicável é marcada com `marcarParte(mesh, 'chave')`, que seta `userData.parte`. O método `#parteSobPonteiro` sobe pelo pai até achar essa marca, e prefere mesh opaca a transparente (importante para os brônquios dentro do pulmão translúcido).
@@ -302,7 +309,7 @@ Depois registre em `modelos/index.js` com o mesmo nome usado em `modelo_tipo` no
 
 | Arquivo | Técnicas |
 |---|---|
-| `utils/geometria.js` | PRNG com semente (mulberry32), ruído simplex 3D, `mergeVertices`, espiral de Fibonacci na esfera, cilindro orientado entre dois pontos, novelo de curva Catmull-Rom (aberto ou fechado), esferas instanciadas, marcação de parte |
+| `utils/geometria.js` | PRNG com semente (mulberry32), ruído simplex 3D, `mergeVertices`, espiral de Fibonacci na esfera, cilindro orientado entre dois pontos, novelo de curva Catmull-Rom (aberto ou fechado), esferas instanciadas, marcação de parte. Para órgãos: `tuboDeRaioVariavel` (raio e modulação por função, posições recalculadas por `atualizar(t)`, opção `paraDentro`, `pontoNaSecao` para pôr objetos na parede) com `fatiarTubo`, `arvoreRamificada` + `geometriaDosRamos`, `dividirPorPlano` e `dividirPorRegiao`, `virarParaDentro` |
 | `shaders/fresnel.js` | ShaderMaterial GLSL próprio (efeito Fresnel), blending aditivo, uniforms animados; `criarHaloDaForma` infla a geometria do corpo ao longo das normais para halos de corpos alongados |
 | `virus.js` | Esfera deformada por ruído ou casca icosaédrica facetada (`envelope.facetado`), InstancedMesh para espículas (cabeça simples, trimérica com `lobulos: 3`, ou proteína `deitada` da dengue), capsômeros pentaméricos em estrela (HPV), distribuição Fibonacci + jitter aleatório, quaternion para orientar instâncias, camada de matriz, "respiração" animada. O interior é delegado a `genomas.js` por `nucleo.tipo` |
 | `genomas.js` | Interiores reutilizáveis: `novelo` (Catmull-Rom + super-hélice com referenciais de Frenet, aberto ou fechado, com fita dupla parcial para a hepatite B), `segmentado` (bastões em grampo no arranjo n + 1: influenza 8, rotavírus 11), `helicoidal` (nucleocapsídeo contínuo dobrado, sarampo), `conico` (LatheGeometry + hexâmeros por `MeshSurfaceSampler`, HIV), `icosaedrico` (casca facetada, capsômeros nos vértices únicos via `mergeVertices`, pentons × hexons por `setColorAt`, e `interior` aninhado para camadas concêntricas) |
@@ -314,7 +321,14 @@ Depois registre em `modelos/index.js` com o mesmo nome usado em `modelo_tipo` no
 | `coco.js` | Empacotamento esférico aleatório sem sobreposição, InstancedMesh com cores por instância (`setColorAt`), oscilação individual, interior instanciado por célula (membrana, nucleoide reaproveitado em orientações sorteadas, ribossomos) |
 | `coracao.js` | Massa ventricular única remodelada vértice a vértice (cone com ápice) e dividida pelo plano do septo em duas malhas, cavidades viradas do avesso (só a face interna aparece no corte; `userData.manterLado`), coronária extraída dos vértices do sulco, valvas com cúspides em dobradiça animadas pelo ciclo, CatmullRomCurve3 + TubeGeometry para os grandes vasos, pulso gaussiano para o ciclo cardíaco (átrios contraem antes dos ventrículos) |
 | `pulmoes.js` | Remodelagem vértice-a-vértice para forma anatômica (incisura cardíaca, base no diafragma), árvore brônquica recursiva (fractal) a partir dos brônquios lobares (3 lobos à direita, 2 à esquerda), artérias e veias que seguem os ramos (deslocamento por Gram-Schmidt), cachos de alvéolos instanciados nas pontas, TorusGeometry parcial para anéis de cartilagem, material semitransparente com `DoubleSide` |
-| `cerebro.js` | Ruído em crista (`(1-|noise|)^7`) para sulcos estreitos, lâminas horizontais no cerebelo, `MeshSurfaceSampler` para distribuir pontos na superfície, Points com shader próprio para "sinapses" piscando |
+| `estomago.js` | `tuboDeRaioVariavel` sobre eixo curvo, cúpula do fundo pelo perfil de raio, duas paredes (muscular por fora; mucosa virada do avesso por dentro, com rugas por ruído), `fatiarTubo` em fundo/corpo/antro/piloro, fossetas instanciadas na mucosa, esfíncter em toro orientado pela tangente, onda de peristaltismo recalculada a cada quadro |
+| `intestino.js` | Curva Catmull-Rom centrípeta em alças, tubo de duas paredes, pregas circulares por modulação periódica do raio, vilosidades instanciadas orientadas para o eixo (acompanham a onda de contração), `fatiarTubo` em duodeno/jejuno/íleo |
+| `figado.js` | Esfera remodelada (lobo esquerdo em cunha, face inferior côncava, sulco falciforme) dividida por plano em dois lobos, cor por vértice como espalhamento subsuperficial falso, `arvoreRamificada` para porta, artéria, ductos e veias hepáticas (vizinhos deslocados por Gram-Schmidt), lóbulos hexagonais instanciados com rejeição por distância, parênquima virado do avesso |
+| `rim.js` | Elipsoide com reentrância do hilo, córtex por fora e por dentro (virado do avesso), pirâmides em cones instanciados apontando para a pelve, cálices por `cilindroEntre`, glomérulos instanciados no córtex, ureter por `tuboDeRaioVariavel` com onda de peristaltismo, árvores de vasos |
+| `cerebro.js` | Hemisférios de esfera remodelada, ruído em crista (`(1-|noise|)^7`) para sulcos, fissura lateral e sulco central como fendas, substância branca por cópia encolhida e virada do avesso, face medial aberta, lobos por `dividirPorRegiao` com cor por vértice suavizada pelos vizinhos e fendas escurecidas, cerebelo com lâminas por seno, tronco por `tuboDeRaioVariavel`, artérias cerebrais médias posicionadas por raycasting na malha, `MeshSurfaceSampler` + Points com shader próprio (recortável) para sinapses piscando |
+| `olho.js` | Calotas esféricas (`SphereGeometry` parcial) para esclera, córnea, vítreo e retina, córnea com transmissão e `ior`, íris em anel de raio interno variável refeito a cada quadro com cores por ruído polar, cristalino que muda de espessura, zônulas instanciadas, vasos da retina por caminhada sorteada sobre a esfera, músculos em `TubeGeometry` com pontas fechadas |
+| `pele.js` | Blocos translúcidos com relevo da epiderme por ruído em crista (que some nas bordas), folículos e glândulas em tubos fechados, novelo da sudorípara por `curvaNovelo`, vasos em Catmull-Rom com hemácias instanciadas animadas por `getPointAt`, receptores em elipsoides concêntricos, adipócitos instanciados sem sobreposição |
+| `osso.js` | Diáfise por `tuboDeRaioVariavel` com perfil de raio e crista posterior, cabeça/colo/trocânter/côndilos como peças próprias, cartilagem em calotas, osso esponjoso por hastes instanciadas com direção de força por região, canal medular virado do avesso |
 
 ### Como adicionar um modelo novo (receita)
 
@@ -342,13 +356,13 @@ Depois registre em `modelos/index.js` com o mesmo nome usado em `modelo_tipo` no
 
 ## 10. O que já está pronto
 
-### Entidades (22)
+### Entidades (30)
 - **Vírus (10)**: SARS-CoV-2, Influenza A, HIV, dengue, rotavírus, HPV, hepatite B, raiva, sarampo, Ebola
 - **Bactérias (10)**: *Escherichia coli*, *Staphylococcus aureus*, *Mycobacterium tuberculosis*, *Vibrio cholerae*, *Helicobacter pylori*, *Leptospira interrogans*, *Treponema pallidum*, *Streptococcus pneumoniae*, *Clostridium tetani*, *Neisseria meningitidis*
-- **Órgãos (2)**: Coração, Pulmões (o Encéfalo e o `cerebro.js` citados em versões anteriores deste arquivo nunca foram implementados)
+- **Órgãos (10)**: Coração, Pulmões, Estômago, Intestino delgado, Fígado, Rim, Encéfalo, Olho, Pele, Fêmur
 
-### Doenças (21)
-COVID-19, Gripe, Pneumonia, Infecção urinária, Intoxicação alimentar, Infarto agudo do miocárdio, HIV e aids, Dengue, Diarreia por rotavírus, Infecção pelo HPV, Hepatite B, Raiva, Sarampo, Doença pelo vírus Ebola, Tuberculose, Cólera, Gastrite e úlcera péptica, Tétano, Meningite bacteriana, Leptospirose, Sífilis
+### Doenças (26)
+COVID-19, Gripe, Pneumonia, Infecção urinária, Intoxicação alimentar, Infarto agudo do miocárdio, HIV e aids, Dengue, Diarreia por rotavírus, Infecção pelo HPV, Hepatite B, Raiva, Sarampo, Doença pelo vírus Ebola, Tuberculose, Cólera, Gastrite e úlcera péptica, Tétano, Meningite bacteriana, Leptospirose, Sífilis, Doença renal crônica, AVC, Catarata, Câncer de pele, Osteoporose
 
 ### Features de CG implementadas
 Iluminação PBR + IBL, raycasting com hover/clique, geometria procedural com ruído, ruído em crista, InstancedMesh, árvore fractal, curvas paramétricas, TubeGeometry, MeshSurfaceSampler, shaders GLSL próprios (Fresnel + Points), modificação de shader padrão via onBeforeCompile, plano de corte orientado pela câmera e fixo no modelo, separação em duas peças por renderização em duas passagens, modo aramado, pausa, animações por quadro (ciclo cardíaco, respiração, flagelos, sinapses).
@@ -363,7 +377,7 @@ Apenas `doencas` tem CRUD completo. `entidades`, `partes`, `categorias` são rea
 Em ordem crescente de esforço:
 
 1. **Página de busca** usando `GET /api/entidades?busca=` (filtro já existe no backend).
-2. **Mais órgãos**: rim, fígado, estômago, olho. Cada um é uma oportunidade de técnica nova (rim = cortes anatômicos; olho = refração; fígado = subsurface scattering).
+2. **Mais órgãos**: bexiga, dente, ouvido, pâncreas, intestino grosso. Cada um é uma oportunidade de técnica nova.
 3. **Mais agentes**: fungo *Candida* (hifas por L-system), protozoários como o *Plasmodium* (malária) ou o *Trypanosoma cruzi* (doença de Chagas).
 4. **Modo comparação**: dois modelos lado a lado com câmera sincronizada.
 5. **Pós-processamento** com `EffectComposer`: bloom nos halos, SSAO nas dobras do cérebro, outline na parte selecionada.

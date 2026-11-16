@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { deformarComRuido, marcarParte } from '../utils/geometria.js';
+import { deformarComRuido, marcarParte, dividirPorPlano, virarParaDentro } from '../utils/geometria.js';
 
 const pulso = (fase, centro, largura) => Math.exp(-((fase - centro) ** 2) / (2 * largura ** 2));
 const suave = (a, b, x) => {
@@ -26,30 +26,6 @@ function geometriaVentriculos(semente) {
     pos.setXYZ(i, v.x * 0.95, v.y, v.z * 0.78);
   }
   return deformarComRuido(geo, { amplitude: 0.02, frequencia: 2, semente });
-}
-
-/** Separa os triângulos de uma malha pelos dois lados de um plano: uma superfície só, duas partes clicáveis. */
-function dividirPorPlano(geo, normal, limite) {
-  const pos = geo.attributes.position;
-  const indices = geo.index.array;
-  const [lado, outro] = [[], []];
-  const centro = new THREE.Vector3();
-  const vertice = new THREE.Vector3();
-  for (let i = 0; i < indices.length; i += 3) {
-    centro.set(0, 0, 0);
-    for (let k = 0; k < 3; k++) centro.add(vertice.fromBufferAttribute(pos, indices[i + k]));
-    (centro.divideScalar(3).dot(normal) > limite ? lado : outro).push(indices[i], indices[i + 1], indices[i + 2]);
-  }
-  return [lado, outro].map((lista) => geo.clone().setIndex(lista));
-}
-
-/** Vira a malha do avesso (ordem dos vértices e normais): a face visível passa a ser a de dentro. */
-function virarParaDentro(geo) {
-  const indices = geo.index.array;
-  for (let i = 0; i < indices.length; i += 3) [indices[i + 1], indices[i + 2]] = [indices[i + 2], indices[i + 1]];
-  const normais = geo.attributes.normal.array;
-  for (let i = 0; i < normais.length; i++) normais[i] = -normais[i];
-  return geo;
 }
 
 /**

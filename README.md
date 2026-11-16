@@ -50,7 +50,7 @@ bioverso/
         └── three/
             ├── Visualizador.js    # cena, câmera, luzes, controles, raycasting, corte
             ├── shaders/fresnel.js # shader GLSL próprio (halo)
-            ├── utils/geometria.js # ruído, Fibonacci, cilindros, sementes
+            ├── utils/geometria.js # ruído, Fibonacci, cilindros, tubos de raio variável, árvores, sementes
             └── modelos/           # geradores procedurais de cada modelo
 ```
 
@@ -87,8 +87,8 @@ Uma **entidade** é qualquer coisa com modelo 3D (vírus, bactéria ou órgão).
 |---|---|
 | Vírus (10) | SARS-CoV-2, Influenza A, HIV, dengue, rotavírus, HPV, hepatite B, raiva (em bala), sarampo, Ebola (filamentoso) |
 | Bactérias (10) | *Escherichia coli* (bacilo com flagelos), *Staphylococcus aureus* (cocos em cacho), *Mycobacterium tuberculosis* (parede cerosa), *Vibrio cholerae* (vírgula), *Helicobacter pylori* (hélice com tufo de flagelos), *Leptospira interrogans* e *Treponema pallidum* (espiroquetas com endoflagelos), *Streptococcus pneumoniae* e *Neisseria meningitidis* (diplococos com cápsula), *Clostridium tetani* (esporo terminal) |
-| Órgãos (2) | Coração (com ciclo cardíaco), pulmões (com respiração e árvore brônquica) |
-| Doenças (21) | COVID-19, gripe, pneumonia, infecção urinária, intoxicação alimentar, infarto, HIV e aids, dengue, diarreia por rotavírus, infecção pelo HPV, hepatite B, raiva, sarampo, Ebola, tuberculose, cólera, gastrite e úlcera péptica, tétano, meningite bacteriana, leptospirose, sífilis |
+| Órgãos (10) | Coração (com ciclo cardíaco), pulmões (com respiração e árvore brônquica), estômago (peristaltismo e mucosa), intestino delgado (vilosidades), fígado (lóbulos e vias biliares), rim (corte anatômico), encéfalo (sulcos, lobos e sinapses), olho (refração e pupila), pele (camadas e glândulas), fêmur (osso esponjoso e canal medular) |
+| Doenças (26) | COVID-19, gripe, pneumonia, infecção urinária, intoxicação alimentar, infarto, HIV e aids, dengue, diarreia por rotavírus, infecção pelo HPV, hepatite B, raiva, sarampo, Ebola, tuberculose, cólera, gastrite e úlcera péptica, tétano, meningite bacteriana, leptospirose, sífilis, doença renal crônica, AVC, catarata, câncer de pele, osteoporose |
 
 Os textos são educativos e resumidos. Revisem com fontes oficiais (OMS, Ministério da Saúde) antes da entrega.
 
@@ -103,12 +103,19 @@ Nenhum modelo é baixado pronto: todos são gerados por código, o que deixa as 
 | Materiais físicos (PBR): rugosidade, clearcoat, sheen, transparência | todos os modelos |
 | Grafo de cena e transformações hierárquicas (flagelo: pivô → inclinação → giro) | `bacilo.js`, `espiral.js` |
 | Geometria procedural: deformação de vértices por ruído simplex 3D | `geometria.js`, `pulmoes.js`, `cerebro.js` |
-| Ruído em crista (ridged noise) para giros e sulcos | `cerebro.js` |
+| Ruído em crista (ridged noise) para giros e sulcos; cor por vértice suavizada pela média dos vizinhos da malha (divisas dos lobos) e fendas escurecidas (oclusão ambiente falsa) | `cerebro.js` |
 | Distribuição uniforme em esfera (espiral de Fibonacci) | `virus.js` |
-| Instanciamento na GPU (`InstancedMesh`): espículas, fímbrias, anéis, cocos, ribossomos, toxinas | `virus.js`, `bacilo.js`, `espiral.js`, `pulmoes.js`, `coco.js` |
+| Instanciamento na GPU (`InstancedMesh`): espículas, fímbrias, anéis, cocos, ribossomos, toxinas, vilosidades, lóbulos hepáticos, pirâmides e glomérulos do rim, hemácias, adipócitos, trabéculas | `virus.js`, `bacilo.js`, `espiral.js`, `pulmoes.js`, `coco.js`, `intestino.js`, `figado.js`, `rim.js`, `pele.js`, `osso.js` |
 | Curvas paramétricas (hélice, Catmull-Rom, super-hélice com referenciais de Frenet) e extrusão de tubos | `virus.js`, `bacilo.js`, `coracao.js`, `cerebro.js` |
 | Estrutura recursiva (fractal) da árvore brônquica, a partir dos brônquios lobares; vasos e alvéolos derivados dos mesmos ramos | `pulmoes.js` |
 | Malha dividida por um plano (septo), cavidades com malha virada do avesso e valvas em dobradiça animadas pelo ciclo cardíaco | `coracao.js` |
+| Tubo de raio variável com posições recalculadas a cada quadro (peristaltismo por onda de constrição), de duas paredes: a de dentro virada do avesso, com rugas ou pregas; fatiado em trechos clicáveis que dividem os mesmos vértices | `geometria.js`, `estomago.js`, `intestino.js`, `rim.js`, `osso.js` |
+| Árvores ramificadas recursivas de vasos e ductos, com vasos vizinhos deslocados por Gram-Schmidt (tríade portal, veias hepáticas, vasos renais) | `geometria.js`, `figado.js`, `rim.js` |
+| Remodelagem de vértices em forma anatômica e aproximação de espalhamento subsuperficial: cor por vértice mais clara e quente onde o órgão é fino | `figado.js`, `rim.js` |
+| Pontos com shader próprio que piscam e aceitam o plano de corte (trechos de clipping do Three.js no GLSL, `userData.recortavel`); artérias que acompanham a superfície por raycasting | `cerebro.js`, `Visualizador.js` |
+| Material físico com transmissão e índice de refração (córnea), íris refeita a cada quadro (pupila), fibras por ruído em coordenadas polares e vasos por caminhada sorteada sobre a esfera | `olho.js` |
+| Camadas translúcidas com relevo por ruído em crista, hemácias que percorrem curvas e receptores em camadas concêntricas | `pele.js` |
+| Osso esponjoso por hastes instanciadas orientadas pelas linhas de força, e canal medular com revestimento virado do avesso | `osso.js` |
 | Amostragem de pontos na superfície da malha (`MeshSurfaceSampler`): espículas da raiva, hexâmeros do capsídeo do HIV | `bala.js`, `genomas.js` |
 | Capsídeo icosaédrico: `IcosahedronGeometry` facetado, capsômeros nos vértices únicos (pentons e hexons por cor de instância) e camadas concêntricas aninhadas | `genomas.js`, `virus.js` |
 | Superfície de revolução (`LatheGeometry`): capsídeo cônico do HIV, partícula em bala da raiva e bacilo com esporo terminal (união suave de dois perfis por máximo suave) | `genomas.js`, `bala.js`, `bacilo.js` |
@@ -122,7 +129,7 @@ Nenhum modelo é baixado pronto: todos são gerados por código, o que deixa as 
 | Modo aramado (wireframe) | `Visualizador.js` |
 | Raycasting para seleção de partes com o mouse | `Visualizador.js` |
 | Animação por quadro: ciclo cardíaco, respiração, flagelos, pulsos | modelos |
-| Blending aditivo e ordem de renderização para transparência | `fresnel.js`, `pulmoes.js`, `diplococo.js` |
+| Blending aditivo e ordem de renderização para transparência | `fresnel.js`, `pulmoes.js`, `diplococo.js`, `cerebro.js`, `olho.js`, `pele.js` |
 
 ## Como adicionar um modelo
 
