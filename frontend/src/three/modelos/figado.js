@@ -1,8 +1,6 @@
 import * as THREE from 'three';
-import {
-  criarAleatorio, deformarComRuido, marcarParte, dividirPorPlano, virarParaDentro,
-  arvoreRamificada, geometriaDosRamos,
-} from '../utils/geometria.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { deformarComRuido, marcarParte, dividirPorPlano, tuboDeRaioVariavel } from '../utils/geometria.js';
 
 const suave = (a, b, x) => {
   const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
@@ -60,118 +58,232 @@ function geometriaFigado(semente) {
   return forma;
 }
 
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+/**
+ * Faixa do ligamento falciforme: deitada na superfície real do fígado, ao longo do sulco entre os lobos,
+ * da margem da frente por cima até o alto. É uma grade fina (algumas colunas na largura, muitas linhas ao
+ * longo do sulco). Cada vértice é achado por um raio contra a malha do fígado, então a faixa cola na
+ * superfície de verdade (com o sulco, com o ruído, com a margem fina) sem deixar vão. A folga mínima é
+ * dada na direção do raio, não pela normal do triângulo (que o ruído deixaria irregular).
+ */
+function geometriaLigamento(figadoGeo) {
+  const malha = new THREE.Mesh(figadoGeo, new THREE.MeshBasicMaterial());
+  const raio = new THREE.Raycaster();
+  const LARGURA = 4; // colunas na largura da faixa
+  const [G0, G1] = [-15, 95]; // da margem da frente, por cima, até o alto (sem passar para as costas)
+  const colunas = [];
+  for (let g = G0; g <= G1; g += 3) {
+    const a = THREE.MathUtils.degToRad(g);
+    const dir = V(0, Math.sin(a), Math.cos(a)); // fora → dentro: da frente (0°) ao alto (90°)
+    const meiaLargura = 0.05 * (0.45 + 0.55 * Math.sin(Math.PI * ((g - G0) / (G1 - G0)))); // afina nas pontas
+    const linha = [];
+    let completa = true;
+    for (let i = 0; i <= LARGURA; i++) {
+      const x = X_SULCO + (i / LARGURA - 0.5) * 2 * meiaLargura;
+      raio.set(V(x, 0, 0).addScaledVector(dir, 4), dir.clone().negate());
+      const acerto = raio.intersectObject(malha)[0];
+      if (!acerto) { completa = false; break; }
+      linha.push(acerto.point.addScaledVector(dir, 0.012)); // encostada na superfície, com uma folga mínima
+    }
+    if (completa) colunas.push(linha);
+  }
+  const vertices = [];
+  for (let c = 0; c < colunas.length - 1; c++) {
+    for (let i = 0; i < LARGURA; i++) {
+      const [a0, a1, b0, b1] = [colunas[c][i], colunas[c][i + 1], colunas[c + 1][i], colunas[c + 1][i + 1]];
+      vertices.push(a0, b0, a1, a1, b0, b1);
+    }
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(vertices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Vaso que afina ao longo de uma curva suave, com uma esfera na origem para a junção com o ramo de onde sai. */
+function tuboAfinado(pontos, r0, r1) {
+  const curva = new THREE.CatmullRomCurve3(pontos);
+  const { geometria } = tuboDeRaioVariavel(curva, { raio: (u) => r0 + (r1 - r0) * u, segmentos: 6 * pontos.length, lados: 10 });
+  const junta = new THREE.SphereGeometry(r0 * 1.02, 10, 8).translate(pontos[0].x, pontos[0].y, pontos[0].z);
+  junta.deleteAttribute('uv');
+  return [geometria, junta];
+}
+
+/** Um sistema de vasos: lista de ramos { pontos, r0, r1 }, deslocados e afinados por igual (para a tríade portal). */
+function sistemaDeVasos(ramos, { deslocamento = V(0, 0, 0), escala = 1 } = {}) {
+  const pecas = ramos.flatMap(({ pontos, r0, r1 }) => tuboAfinado(pontos.map((p) => p.clone().add(deslocamento)), r0 * escala, r1 * escala));
+  return mergeGeometries(pecas.map((g) => g.toNonIndexed()));
+}
+
+// Veia porta: entra pelo hilo, na face de baixo, e se divide em ramo direito e esquerdo, cada um com
+// os seus ramos segmentares. Fica quase toda no plano frontal: um corte de frente mostra a árvore.
+const HILO = V(-0.1, -0.32, 0.12);
+const PORTA_DIREITA = V(-0.55, -0.12, 0.05);
+const PORTA_ESQUERDA = V(0.45, -0.12, 0.05);
+const RAMOS_PORTA = [
+  { pontos: [HILO, V(-0.32, -0.25, 0.08), PORTA_DIREITA], r0: 0.085, r1: 0.075 },
+  { pontos: [HILO, V(0.18, -0.24, 0.08), PORTA_ESQUERDA], r0: 0.075, r1: 0.065 },
+  // ramo direito anterior e posterior, com dois ramos cada
+  { pontos: [PORTA_DIREITA, V(-0.8, 0.0, 0.14), V(-1.0, 0.15, 0.22)], r0: 0.06, r1: 0.045 },
+  { pontos: [V(-1.0, 0.15, 0.22), V(-1.15, 0.27, 0.27), V(-1.3, 0.36, 0.3)], r0: 0.04, r1: 0.022 },
+  { pontos: [V(-1.0, 0.15, 0.22), V(-1.2, 0.05, 0.3), V(-1.38, -0.04, 0.33)], r0: 0.04, r1: 0.022 },
+  { pontos: [PORTA_DIREITA, V(-0.82, -0.1, -0.12), V(-1.05, -0.05, -0.25)], r0: 0.06, r1: 0.045 },
+  { pontos: [V(-1.05, -0.05, -0.25), V(-1.25, 0.06, -0.28), V(-1.45, 0.14, -0.3)], r0: 0.04, r1: 0.022 },
+  { pontos: [V(-1.05, -0.05, -0.25), V(-1.2, -0.13, -0.2), V(-1.32, -0.2, -0.14)], r0: 0.04, r1: 0.022 },
+  { pontos: [PORTA_DIREITA, V(-0.6, 0.12, 0.02), V(-0.6, 0.3, 0.0)], r0: 0.045, r1: 0.028 },
+  // ramo esquerdo: segue para o lobo esquerdo e manda um ramo para cima (segmento IV)
+  { pontos: [PORTA_ESQUERDA, V(0.72, -0.06, 0.05), V(0.95, 0.0, 0.05)], r0: 0.055, r1: 0.042 },
+  { pontos: [V(0.95, 0.0, 0.05), V(1.15, 0.01, 0.05), V(1.35, 0.02, 0.05)], r0: 0.035, r1: 0.02 },
+  { pontos: [V(0.95, 0.0, 0.05), V(1.0, 0.1, 0.0), V(1.05, 0.18, -0.05)], r0: 0.032, r1: 0.02 },
+  { pontos: [PORTA_ESQUERDA, V(0.52, 0.12, 0.08), V(0.58, 0.32, 0.1)], r0: 0.04, r1: 0.025 },
+];
+
+// Veias hepáticas: três troncos (direita, média e esquerda) que descem da veia cava, atrás e no alto
+const CAVA = V(0, 0.62, -0.8);
+const RAMOS_HEPATICAS = [
+  { pontos: [CAVA, V(-0.7, 0.42, -0.45), V(-1.3, 0.15, -0.15)], r0: 0.07, r1: 0.03 },
+  { pontos: [V(-0.7, 0.42, -0.45), V(-0.85, 0.52, -0.35), V(-1.0, 0.55, -0.3)], r0: 0.035, r1: 0.02 },
+  { pontos: [CAVA, V(-0.1, 0.35, -0.25), V(-0.2, 0.05, 0.3)], r0: 0.06, r1: 0.025 },
+  { pontos: [V(-0.1, 0.35, -0.25), V(0.08, 0.33, -0.05), V(0.25, 0.3, 0.15)], r0: 0.032, r1: 0.018 },
+  { pontos: [CAVA, V(0.55, 0.4, -0.4), V(1.1, 0.12, -0.1)], r0: 0.055, r1: 0.025 },
+];
+
+/**
+ * Lóbulos hepáticos em favo: até 19 prismas hexagonais encaixados (dois anéis em volta de um central),
+ * com a veia central no meio de cada um e as tríades portais (artéria, veia porta e ducto biliar) nos
+ * cantos. Os prismas correm na profundidade (eixo Z): um corte de frente mostra os hexágonos.
+ * `cabe(ponto)` diz se um ponto está dentro do fígado: lóbulo que encostaria na superfície fica de fora.
+ */
+function criarFavoDeLobulos(centro, cabe) {
+  const grupo = new THREE.Group();
+  const R = 0.085; // raio do hexágono
+  const PROFUNDIDADE_FAVO = 0.3;
+  const forma = new THREE.Shape();
+  for (let k = 0; k < 6; k++) {
+    const a = Math.PI / 6 + (k * Math.PI) / 3; // hexágono com ponta para cima
+    const x = Math.cos(a) * R * 0.95;
+    const y = Math.sin(a) * R * 0.95;
+    if (k === 0) forma.moveTo(x, y);
+    else forma.lineTo(x, y);
+  }
+  const prisma = new THREE.ExtrudeGeometry(forma, { depth: PROFUNDIDADE_FAVO, bevelEnabled: false }).translate(0, 0, -PROFUNDIDADE_FAVO / 2);
+  // cantos do prisma (nas duas faces): todos precisam caber dentro do órgão
+  const cantosDoPrisma = [];
+  for (let k = 0; k < 6; k++) {
+    const a = Math.PI / 6 + (k * Math.PI) / 3;
+    for (const z of [-PROFUNDIDADE_FAVO / 2, PROFUNDIDADE_FAVO / 2]) cantosDoPrisma.push(V(Math.cos(a) * R, Math.sin(a) * R, z));
+  }
+  const celulas = [];
+  for (let q = -2; q <= 2; q++) {
+    for (let r = -2; r <= 2; r++) {
+      if (Math.abs(q + r) > 2) continue;
+      const c = V(R * Math.sqrt(3) * (q + r / 2), R * 1.5 * r, 0).add(centro);
+      if (cantosDoPrisma.every((canto) => cabe(canto.clone().add(c)))) celulas.push(c);
+    }
+  }
+  const materialPrisma = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.6 });
+  materialPrisma.userData.interiorCheio = true;
+  const prismas = new THREE.InstancedMesh(prisma, materialPrisma, celulas.length);
+  const tons = ['#d68a6b', '#cf7f61', '#dc977a'];
+  const m = new THREE.Matrix4();
+  celulas.forEach((c, i) => {
+    prismas.setMatrixAt(i, m.makeTranslation(c.x, c.y, c.z));
+    prismas.setColorAt(i, new THREE.Color(tons[i % 3]));
+  });
+  grupo.add(marcarParte(prismas, 'lobulos'));
+
+  // cilindros na profundidade: a veia central e os três vasos de cada tríade
+  const cilindro = (raio) => new THREE.CylinderGeometry(raio, raio, PROFUNDIDADE_FAVO + 0.03, 8).rotateX(Math.PI / 2);
+  const instancias = (geometria, cor, pontos) => {
+    const material = new THREE.MeshStandardMaterial({ color: cor, roughness: 0.45 });
+    material.userData.interiorCheio = true;
+    const malha = new THREE.InstancedMesh(geometria, material, pontos.length);
+    pontos.forEach((p, i) => malha.setMatrixAt(i, m.makeTranslation(p.x, p.y, p.z)));
+    return marcarParte(malha, 'lobulos');
+  };
+  grupo.add(instancias(cilindro(0.02), '#3a4fa8', celulas));
+
+  // tríades nos cantos, sem repetir os cantos que dois ou três hexágonos vizinhos compartilham
+  const cantos = new Map();
+  for (const c of celulas) {
+    for (const k of [0, 2, 4]) {
+      const a = Math.PI / 6 + (k * Math.PI) / 3;
+      const p = V(c.x + Math.cos(a) * R, c.y + Math.sin(a) * R, c.z);
+      cantos.set(`${p.x.toFixed(3)},${p.y.toFixed(3)}`, p);
+    }
+  }
+  const pontos = [...cantos.values()];
+  grupo.add(
+    instancias(cilindro(0.014), '#8a63c9', pontos.map((p) => p.clone().add(V(-0.016, -0.008, 0)))),
+    instancias(cilindro(0.009), '#d6403a', pontos.map((p) => p.clone().add(V(0.016, -0.008, 0)))),
+    instancias(cilindro(0.009), '#7ea34a', pontos.map((p) => p.clone().add(V(0, 0.017, 0))))
+  );
+  return grupo;
+}
+
 export function criarFigado(params, cores) {
-  const { semente = 11, lobulos = 420, ramificacoes = 4, respiracoesPorMinuto = 14 } = params;
-  const aleatorio = criarAleatorio(semente);
+  const { semente = 11, respiracoesPorMinuto = 14 } = params;
   const grupo = new THREE.Group();
 
+  // lobos: cortado, o fígado mostra o parênquima cheio (é um órgão maciço), não uma casca
   const figado = geometriaFigado(semente);
-  const material = () => new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.5, clearcoat: 0.55, clearcoatRoughness: 0.3, sheen: 0.4, sheenColor: '#ff9a82' });
+  const material = () => {
+    const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.5, clearcoat: 0.55, clearcoatRoughness: 0.3, sheen: 0.4, sheenColor: '#ff9a82' });
+    m.userData.interiorCheio = '#b2563f';
+    return m;
+  };
   const [geoEsquerdo, geoDireito] = dividirPorPlano(figado, new THREE.Vector3(1, 0, 0), X_SULCO);
   grupo.add(marcarParte(new THREE.Mesh(geoDireito, material()), 'lobo_direito'));
   grupo.add(marcarParte(new THREE.Mesh(geoEsquerdo, material()), 'lobo_esquerdo'));
 
-  // parênquima por dentro: a mesma forma, menor e virada do avesso, para o corte mostrar uma cavidade iluminada
-  const miolo = virarParaDentro(figado.clone());
-  miolo.scale(0.93, 0.9, 0.93);
-  const materialMiolo = new THREE.MeshStandardMaterial({ color: '#b9573f', roughness: 0.7, side: THREE.FrontSide });
-  materialMiolo.userData.manterLado = true;
-  grupo.add(marcarParte(new THREE.Mesh(miolo, materialMiolo), 'lobulos'));
-
-  // aproximação do volume interno (elipsoide), para os vasos e lóbulos ficarem dentro do órgão
-  const dentro = (ponto, folga = 0.55) => {
-    const x = ponto.x / COMPRIMENTO;
+  // favo de lóbulos no lobo direito, no alto e para o lado, longe dos vasos
+  // (dentro do lobo direito, com folga da superfície; os lóbulos que não couberem inteiros são descartados)
+  const cabe = (p) => {
+    const x = p.x / COMPRIMENTO;
     const e = suave(0, 1, x);
-    const ay = ALTURA * (ponto.y > 0 ? 1 : 0.5) * (1 - 0.62 * e);
+    const ay = ALTURA * (1 - 0.62 * e) * (p.y > 0 ? 1 : 0.5);
     const az = PROFUNDIDADE * (1 - 0.35 * e);
-    return x * x + (ponto.y / ay) ** 2 + (ponto.z / az) ** 2 < folga;
+    return x * x + (p.y / ay) ** 2 + (p.z / az) ** 2 < 0.78;
   };
+  grupo.add(criarFavoDeLobulos(V(-1.0, 0.16, 0), cabe));
 
-  // lóbulos hepáticos: prismas de seis lados com uma veia central, sorteados sem se encostarem
-  const prismas = [];
-  for (let tentativas = 0; prismas.length < lobulos && tentativas < lobulos * 40; tentativas++) {
-    const ponto = new THREE.Vector3((aleatorio() * 2 - 1) * COMPRIMENTO, (aleatorio() * 2 - 1) * ALTURA, (aleatorio() * 2 - 1) * PROFUNDIDADE);
-    if (!dentro(ponto, 0.5) || prismas.some((o) => o.distanceToSquared(ponto) < 0.15 * 0.15)) continue;
-    prismas.push(ponto);
-  }
-  const malhaPrismas = new THREE.InstancedMesh(
-    new THREE.CylinderGeometry(0.07, 0.07, 0.085, 6),
-    new THREE.MeshStandardMaterial({ color: '#d98a6c', roughness: 0.55 }),
-    prismas.length
-  );
-  const malhaVeiaCentral = new THREE.InstancedMesh(
-    new THREE.CylinderGeometry(0.012, 0.012, 0.12, 6),
-    new THREE.MeshStandardMaterial({ color: '#8a2b3c', roughness: 0.5 }),
-    prismas.length
-  );
-  const m = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  prismas.forEach((ponto, i) => {
-    q.setFromEuler(new THREE.Euler(aleatorio() * Math.PI, aleatorio() * Math.PI, aleatorio() * Math.PI));
-    m.compose(ponto, q, new THREE.Vector3(1, 1, 1));
-    malhaPrismas.setMatrixAt(i, m);
-    malhaVeiaCentral.setMatrixAt(i, m);
-  });
-  grupo.add(marcarParte(malhaPrismas, 'lobulos'), marcarParte(malhaVeiaCentral, 'lobulos'));
-
-  // vasos: três árvores recursivas. Porta, artéria e ductos correm juntos (a tríade portal);
-  // as veias hepáticas descem de cima, entre eles.
-  const material_vaso = (cor) => new THREE.MeshPhysicalMaterial({ color: cor, roughness: 0.4, clearcoat: 0.5 });
-  const hilo = new THREE.Vector3(-0.1, -0.4, 0.25);
-  const ramosPorta = [];
-  for (const [direcao, comprimento] of [[new THREE.Vector3(-1, 0.45, -0.1), 0.6], [new THREE.Vector3(0.9, 0.45, -0.05), 0.5]]) {
-    arvoreRamificada({
-      inicio: hilo, direcao: direcao.normalize(), comprimento, raio: 0.075, profundidade: ramificacoes,
-      dentro: (ponto) => dentro(ponto, 0.5), aleatorio, ramos: ramosPorta, abertura: 0.7, reducaoComprimento: 0.78,
-    });
-  }
-  const frente = new THREE.Vector3(0, 0, 1);
-  const ladoDoRamo = (sinal) => (ramo) => {
-    const d = ramo.fim.clone().sub(ramo.inicio).normalize();
-    return frente.clone().addScaledVector(d, -frente.dot(d)).normalize().multiplyScalar(sinal * ramo.raio * 1.9);
+  // vasos. Porta, artéria e ducto correm juntos (tríade portal); as veias hepáticas vêm de cima, atrás.
+  const materialVaso = (cor) => {
+    const m = new THREE.MeshPhysicalMaterial({ color: cor, roughness: 0.4, clearcoat: 0.5 });
+    m.userData.interiorCheio = true;
+    return m;
   };
-  grupo.add(marcarParte(new THREE.Mesh(geometriaDosRamos(ramosPorta, { lados: 8 }), material_vaso('#5b6bc0')), 'veia_porta'));
-  grupo.add(marcarParte(new THREE.Mesh(geometriaDosRamos(ramosPorta, { espessura: 0.42, lados: 6, deslocamento: ladoDoRamo(1) }), material_vaso('#d6403a')), 'arteria_hepatica'));
-  const ductosIntra = new THREE.Mesh(geometriaDosRamos(ramosPorta, { espessura: 0.42, lados: 6, deslocamento: ladoDoRamo(-1) }), material_vaso('#7ea34a'));
-  grupo.add(marcarParte(ductosIntra, 'ductos_biliares'));
-
-  const ramosVeias = [];
-  for (const direcao of [new THREE.Vector3(-0.7, -0.55, 0.3), new THREE.Vector3(0.75, -0.5, 0.25), new THREE.Vector3(0, -0.5, 0.85)]) {
-    arvoreRamificada({
-      inicio: new THREE.Vector3(0, 0.65, -0.55), direcao: direcao.normalize(), comprimento: 0.55, raio: 0.07, profundidade: ramificacoes - 1,
-      dentro: (ponto) => dentro(ponto, 0.5), aleatorio, ramos: ramosVeias, abertura: 0.7, reducaoComprimento: 0.78,
-    });
-  }
-  grupo.add(marcarParte(new THREE.Mesh(geometriaDosRamos(ramosVeias, { lados: 8 }), material_vaso('#33449a')), 'veias_hepaticas'));
+  grupo.add(marcarParte(new THREE.Mesh(sistemaDeVasos(RAMOS_PORTA), materialVaso('#8a63c9')), 'veia_porta'));
+  grupo.add(marcarParte(new THREE.Mesh(sistemaDeVasos(RAMOS_PORTA, { deslocamento: V(0, 0.05, 0.045), escala: 0.38 }), materialVaso('#d6403a')), 'arteria_hepatica'));
+  grupo.add(marcarParte(new THREE.Mesh(sistemaDeVasos(RAMOS_PORTA, { deslocamento: V(0, -0.05, 0.045), escala: 0.42 }), materialVaso('#7ea34a')), 'ductos_biliares'));
+  grupo.add(marcarParte(new THREE.Mesh(sistemaDeVasos(RAMOS_HEPATICAS), materialVaso('#2f3f8f')), 'veias_hepaticas'));
 
   // fora do órgão: veia cava inferior (atrás), tronco da veia porta, artéria e colédoco
   const tubo = (pontos, raio, cor, chave) => {
-    const malha = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pontos), 40, raio, 12), material_vaso(cor));
+    const malha = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pontos), 40, raio, 12), materialVaso(cor));
     grupo.add(marcarParte(malha, chave));
     return malha;
   };
-  tubo([new THREE.Vector3(0.0, 1.25, -0.9), new THREE.Vector3(0.0, 0.7, -0.96), new THREE.Vector3(0.0, -0.2, -0.9), new THREE.Vector3(0.0, -0.8, -0.8)], 0.09, '#33449a', 'veias_hepaticas');
-  const junta = new THREE.Vector3(-0.05, -0.65, 0.3);
-  tubo([new THREE.Vector3(0.45, -1.25, 0.55), new THREE.Vector3(0.2, -0.85, 0.4), hilo.clone().add(new THREE.Vector3(0, -0.04, 0))], 0.09, '#5b6bc0', 'veia_porta');
-  tubo([new THREE.Vector3(0.6, -1.2, 0.35), new THREE.Vector3(0.3, -0.8, 0.28), hilo.clone().add(new THREE.Vector3(0.1, -0.03, -0.02))], 0.035, '#d6403a', 'arteria_hepatica');
-  tubo([hilo.clone().add(new THREE.Vector3(-0.08, -0.03, 0.04)), junta, new THREE.Vector3(0.15, -1.0, 0.3), new THREE.Vector3(0.3, -1.3, 0.35)], 0.04, '#7ea34a', 'ductos_biliares');
+  tubo([V(0.0, 1.25, -0.88), V(0.0, 0.62, -0.84), V(0.0, -0.2, -0.88), V(0.0, -0.8, -0.8)], 0.09, '#2f3f8f', 'veias_hepaticas');
+  const junta = V(-0.05, -0.65, 0.3);
+  tubo([V(0.45, -1.25, 0.55), V(0.2, -0.85, 0.35), HILO], 0.085, '#8a63c9', 'veia_porta');
+  tubo([V(0.6, -1.2, 0.35), V(0.3, -0.8, 0.25), HILO.clone().add(V(0, 0.05, 0.045))], 0.032, '#d6403a', 'arteria_hepatica');
+  tubo([HILO.clone().add(V(0, -0.05, 0.045)), junta, V(0.15, -1.0, 0.3), V(0.3, -1.3, 0.35)], 0.036, '#7ea34a', 'ductos_biliares');
 
-  // vesícula biliar (pera) sob o lobo direito, e o ducto cístico até o colédoco
-  const vesicula = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 32, 24),
-    new THREE.MeshPhysicalMaterial({ color: cores.secundaria, roughness: 0.35, clearcoat: 0.7, transparent: true, opacity: 0.92 })
-  );
+  // vesícula biliar (pera) sob o lobo direito, cheia de bile, e o ducto cístico até o colédoco
+  const materialVesicula = new THREE.MeshPhysicalMaterial({ color: cores.secundaria, roughness: 0.35, clearcoat: 0.7 });
+  materialVesicula.userData.interiorCheio = '#4f7a30';
+  const vesicula = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), materialVesicula);
   vesicula.scale.set(0.17, 0.4, 0.17);
   vesicula.position.set(-0.7, -0.5, 0.42);
   vesicula.rotation.z = -1.0;
   grupo.add(marcarParte(vesicula, 'vesicula_biliar'));
-  tubo([new THREE.Vector3(-0.58, -0.68, 0.42), new THREE.Vector3(-0.35, -0.7, 0.38), junta], 0.03, '#7ea34a', 'ductos_biliares');
+  tubo([V(-0.58, -0.68, 0.42), V(-0.35, -0.7, 0.38), junta], 0.03, '#7ea34a', 'ductos_biliares');
 
-  // ligamento falciforme: lâmina fina na face da frente, no sulco entre os lobos
-  const ligamento = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshStandardMaterial({ color: '#e4c7a6', roughness: 0.7 }));
-  ligamento.scale.set(0.012, 0.5, 0.17);
-  ligamento.position.set(X_SULCO, 0.28, 0.76);
-  grupo.add(marcarParte(ligamento, 'ligamento_falciforme'));
+  // ligamento falciforme: crista fina que acompanha a superfície do fígado no sulco entre os lobos.
+  // A base de cada ponto fica sobre a própria malha (achada por raio), e a borda livre sobe um pouco
+  // pela normal: assim a membrana nunca atravessa nem fura a superfície curva.
+  grupo.add(marcarParte(new THREE.Mesh(geometriaLigamento(figado), new THREE.MeshStandardMaterial({ color: '#e4c7a6', roughness: 0.7, side: THREE.DoubleSide })), 'ligamento_falciforme'));
 
   // o diafragma sobe e desce com a respiração e leva o fígado junto
   const omega = (respiracoesPorMinuto / 60) * Math.PI * 2;

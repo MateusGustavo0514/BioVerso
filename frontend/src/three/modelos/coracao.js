@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { deformarComRuido, marcarParte, dividirPorPlano, virarParaDentro } from '../utils/geometria.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { deformarComRuido, marcarParte, dividirPorPlano, virarParaDentro, cilindroEntre } from '../utils/geometria.js';
 
 const pulso = (fase, centro, largura) => Math.exp(-((fase - centro) ** 2) / (2 * largura ** 2));
 const suave = (a, b, x) => {
@@ -89,8 +90,12 @@ export function criarCoracao(params, cores) {
 
   const corMusculo = new THREE.Color(cores.primaria);
   const corVenosa = new THREE.Color(cores.secundaria);
-  const musculo = (cor) =>
-    new THREE.MeshPhysicalMaterial({ color: cor, roughness: 0.5, clearcoat: 0.6, clearcoatRoughness: 0.35, sheen: 0.15, sheenColor: '#ff9a9a' });
+  // cortado, o músculo aparece cheio (a espessura da parede fica visível), e não como uma casca
+  const musculo = (cor) => {
+    const material = new THREE.MeshPhysicalMaterial({ color: cor, roughness: 0.5, clearcoat: 0.6, clearcoatRoughness: 0.35, sheen: 0.15, sheenColor: '#ff9a9a' });
+    material.userData.interiorCheio = true;
+    return material;
+  };
   // revestimento interno das câmaras: só a face de dentro (malha virada do avesso), por isso não vira DoubleSide
   const parede = (cor) => {
     const material = new THREE.MeshStandardMaterial({ color: cor, roughness: 0.75, side: THREE.FrontSide });
@@ -146,6 +151,29 @@ export function criarCoracao(params, cores) {
   valvas.pulmonar.position.set(0.1, 0.4, 0.38);
   valvas.aortica.position.set(-0.05, 0.36, -0.05);
   ventriculos.add(...Object.values(valvas));
+
+  // Músculos papilares (no fundo de cada ventrículo) e cordas tendíneas, que os prendem às cúspides
+  // da mitral e da tricúspide: quando o ventrículo contrai, elas impedem que a valva vire para o átrio
+  const pecasPapilares = [];
+  const cordas = [];
+  const papilar = (base, topo, valva, raioValva, angulos) => {
+    pecasPapilares.push(cilindroEntre(base, topo, 0.07, 0.035, 14), new THREE.SphereGeometry(0.036, 12, 8).translate(topo.x, topo.y, topo.z));
+    for (const a of angulos) {
+      const borda = valva.position.clone().add(new THREE.Vector3(Math.cos(a) * raioValva * 0.75, -0.06, -Math.sin(a) * raioValva * 0.75));
+      cordas.push(cilindroEntre(topo, borda, 0.006, 0.005, 5));
+    }
+  };
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  papilar(V(0.12, -0.64, -0.12), V(0.14, -0.34, -0.14), valvas.mitral, 0.16, [2.4, 3.0, 3.6, 4.2]);
+  papilar(V(0.44, -0.62, -0.3), V(0.42, -0.33, -0.3), valvas.mitral, 0.16, [-0.6, 0.0, 0.6, 1.2]);
+  papilar(V(-0.45, -0.52, 0.31), V(-0.45, -0.24, 0.29), valvas.tricuspide, 0.17, [4.4, 5.0, 5.6]);
+  papilar(V(-0.62, -0.46, 0.14), V(-0.6, -0.2, 0.15), valvas.tricuspide, 0.17, [2.6, 3.2, 3.8]);
+  const materialPapilar = musculo(corMusculo.clone().offsetHSL(0, -0.05, 0.08));
+  const materialCorda = new THREE.MeshStandardMaterial({ color: '#f2ece0', roughness: 0.5 });
+  ventriculos.add(
+    marcarParte(new THREE.Mesh(mergeGeometries(pecasPapilares.map((g) => g.toNonIndexed())), materialPapilar), 'musculos_papilares'),
+    marcarParte(new THREE.Mesh(mergeGeometries(cordas), materialCorda), 'musculos_papilares')
+  );
   grupo.add(ventriculos);
 
   // posição de uma valva no espaço do coração, para ligar os vasos a ela

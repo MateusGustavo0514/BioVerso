@@ -506,7 +506,20 @@ main:focus { outline: none; }
 
 .relacionadas { list-style: none; padding: 0; margin: 0 0 2rem; display: grid; gap: 0.75rem; }
 .relacionadas a { display: flex; align-items: center; gap: 1rem; color: inherit; text-decoration: none; }
+/* lâmina de vidro com a foto do modelo (miniaturas.js); até a foto ficar pronta, a mancha ocupa o lugar */
+.relacionadas .relacionadas__vidro {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 5rem;
+  height: 5rem;
+  background: linear-gradient(160deg, var(--vidro-claro), var(--vidro-fosco));
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-lamina);
+}
 .relacionadas .mancha { width: 3rem; }
+.relacionadas__modelo { display: block; width: 100%; height: 100%; object-fit: contain; transition: scale 0.25s ease; }
+.relacionadas a:hover .relacionadas__modelo { scale: 1.08; }
 .relacionadas span { display: flex; flex-direction: column; line-height: 1.3; }
 .relacionadas strong { font-family: var(--fonte-titulo); color: var(--hematoxilina); }
 .relacionadas a:hover strong { text-decoration: underline; }

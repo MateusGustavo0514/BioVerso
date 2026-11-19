@@ -238,13 +238,19 @@ export function fatiarTubo(tubo, fracoes) {
   for (let k = 0; k < fracoes.length - 1; k++) {
     const de = Math.round(fracoes[k] * segmentos) * lados * 6;
     const ate = Math.round(fracoes[k + 1] * segmentos) * lados * 6;
-    const fatia = new THREE.BufferGeometry();
-    fatia.setAttribute('position', geometria.attributes.position);
-    fatia.setAttribute('normal', geometria.attributes.normal);
-    fatia.setIndex(Array.from(todos.slice(de, ate)));
-    fatias.push(fatia);
+    fatias.push(partilharVertices(geometria, Array.from(todos.slice(de, ate))));
   }
   return fatias;
+}
+
+/** Geometria nova com outro índice, mas os mesmos atributos (posição, normal e cor): a animação vale para as duas. */
+function partilharVertices(geometria, indices) {
+  const nova = new THREE.BufferGeometry();
+  for (const nome of ['position', 'normal', 'color']) {
+    if (geometria.attributes[nome]) nova.setAttribute(nome, geometria.attributes[nome]);
+  }
+  nova.setIndex(indices);
+  return nova;
 }
 
 /**

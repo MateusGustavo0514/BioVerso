@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createNoise3D } from 'simplex-noise';
 import { mergeVertices, mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MeshSurfaceSampler } from 'three/addons/math/MeshSurfaceSampler.js';
-import { criarAleatorio, marcarParte, virarParaDentro, dividirPorRegiao, tuboDeRaioVariavel } from '../utils/geometria.js';
+import { criarAleatorio, marcarParte, dividirPorRegiao, tuboDeRaioVariavel } from '../utils/geometria.js';
 
 const suave = (a, b, x) => {
   const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
@@ -40,8 +40,9 @@ function formaDoHemisferio(lado) {
 }
 
 /**
- * Cada hemisfério tem três superfícies: o córtex (por fora), com os sulcos, e a substância branca, uma
- * cópia encolhida e virada do avesso. Os sulcos vêm de ruído em crista, (1 - |ruído|)^7, que dá
+ * Cada hemisfério tem duas superfícies: o córtex (por fora), com os sulcos, e a substância branca, uma
+ * cópia encolhida. As duas têm interior cheio: cortado, o hemisfério mostra a faixa cinzenta do
+ * córtex em volta do miolo branco, como num corte real. Os sulcos vêm de ruído em crista, (1 - |ruído|)^7, que dá
  * linhas estreitas e fundas em volta de giros largos; a fissura lateral e o sulco central são
  * fendas explícitas.
  */
@@ -55,7 +56,6 @@ function criarHemisferio(lado, semente) {
       pos.setXYZ(i, pos.getX(i) - nor.getX(i) * INSET, pos.getY(i) - nor.getY(i) * INSET, pos.getZ(i) - nor.getZ(i) * INSET);
     }
     miolo.computeVertexNormals();
-    virarParaDentro(miolo);
   }
 
   const ruido = createNoise3D(criarAleatorio(semente));
@@ -76,14 +76,23 @@ function criarHemisferio(lado, semente) {
     fundura += 0.15 * Math.exp(-((p.y - yLateral) ** 2) / (2 * 0.03 ** 2)) * lateral * suave(-0.75, -0.4, p.x) * (1 - suave(0.55, 0.8, p.x));
     const xCentral = -0.05 + 0.18 * p.y; // o sulco central desce inclinado pelo alto
     fundura += 0.11 * Math.exp(-((p.x - xCentral) ** 2) / (2 * 0.025 ** 2)) * suave(0.1, 0.5, p.y) * suave(0.02, 0.2, afastamento);
+    // face medial (vista no corte pelo meio): sulco do cíngulo acima do corpo caloso, parieto-occipital e calcarino
+    const medial = 1 - suave(0.0, 0.06, afastamento);
+    const yCingulo = 0.46 - 0.3 * (p.x / 0.85) ** 2;
+    fundura += medial * 0.06 * Math.exp(-((p.y - yCingulo) ** 2) / (2 * 0.02 ** 2)) * (1 - suave(0.75, 0.9, Math.abs(p.x)));
+    fundura += medial * 0.06 * Math.exp(-((p.x - (0.78 + 0.35 * p.y)) ** 2) / (2 * 0.02 ** 2)) * suave(-0.05, 0.05, p.y);
+    fundura += medial * 0.06 * Math.exp(-((p.y + 0.05) ** 2) / (2 * 0.02 ** 2)) * suave(0.75, 0.9, p.x);
     fundura = Math.min(fundura, INSET * 0.7); // nunca chega à substância branca
     profundidades[i] = fundura;
     p.addScaledVector(n, -fundura);
     pos.setXYZ(i, p.x, p.y, p.z);
   }
   geo.computeVertexNormals();
-  // a face medial do córtex é aberta: o corte pelo meio mostra o interior (corpo caloso, tálamo, ventrículos)
-  const aberto = dividirPorRegiao(geo, 2, (c) => (Math.abs(c.z) > MEDIAL + 0.02 ? 0 : 1))[0];
+  // janela na face medial, na altura do corpo caloso e abaixo dele: num corte sagital real, ali aparecem
+  // o corpo caloso cortado e o diencéfalo (tálamo, terceiro ventrículo), e não córtex. O resto da face
+  // medial (com o sulco do cíngulo por cima) continua fechado.
+  const naJanela = (c) => Math.abs(c.z) < MEDIAL + 0.02 && (c.x / 0.76) ** 2 + ((c.y - 0.02) / 0.36) ** 2 < 1;
+  const aberto = dividirPorRegiao(geo, 2, (c) => (naJanela(c) ? 1 : 0))[0];
   return { geo: aberto, miolo, profundidades };
 }
 
@@ -158,6 +167,31 @@ function criarCerebelo(ruido) {
   return liso;
 }
 
+/**
+ * Árvore da vida do cerebelo: a substância branca se ramifica em direção às folhas, como os galhos de
+ * uma árvore. Galhos recursivos num plano (o sagital), engrossados na profundidade, para aparecerem
+ * em qualquer corte perto do meio.
+ */
+function arvoreDaVida() {
+  const pecas = [];
+  const galho = (inicio, angulo, comprimento, raio, nivel) => {
+    const direcao = V(Math.cos(angulo), Math.sin(angulo), 0);
+    const fim = inicio.clone().addScaledVector(direcao, comprimento);
+    const meio = inicio.clone().lerp(fim, 0.5).add(V(0, 0.015 * Math.sin(angulo * 3), 0));
+    pecas.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([inicio, meio, fim]), 8, raio, 8));
+    pecas.push(new THREE.SphereGeometry(raio, 8, 6).translate(fim.x, fim.y, fim.z));
+    if (nivel === 0) return;
+    for (const desvio of nivel > 1 ? [-0.5, 0.05, 0.55] : [-0.45, 0.45]) {
+      galho(fim, angulo + desvio, comprimento * 0.62, raio * 0.65, nivel - 1);
+    }
+  };
+  const tronco = V(0.56, -0.6, 0);
+  for (const angulo of [0.75, 0.15, -0.5]) galho(tronco, angulo, 0.2, 0.034, 2);
+  const geo = mergeGeometries(pecas.map((g) => g.toNonIndexed()));
+  geo.scale(1, 1, 4); // vira uma lâmina na profundidade
+  return geo;
+}
+
 /** Pontos com shader próprio: cada sinapse pisca no seu ritmo. Aceita o corte (inclui os trechos de clipping do Three.js). */
 function materialSinapses(cor) {
   const material = new THREE.ShaderMaterial({
@@ -215,47 +249,88 @@ export function criarCerebro(params, cores) {
   const chavesLobos = ['lobo_frontal', 'lobo_parietal', 'lobo_temporal', 'lobo_occipital'];
   const superficies = []; // para raycast e amostragem
   const materialMiolo = standard(cores.secundaria, 0.7);
-  materialMiolo.side = THREE.FrontSide;
-  materialMiolo.userData.manterLado = true;
+  materialMiolo.userData.interiorCheio = '#f1e9dc'; // cortada, a substância branca aparece cheia
   for (const lado of [-1, 1]) {
     const { geo, miolo, profundidades } = criarHemisferio(lado, semente + (lado > 0 ? 7 : 0));
     superficies.push({ geo, lado });
     colorirLobos(geo, coresLobos, classificar, profundidades);
     dividirPorRegiao(geo, 4, classificar).forEach((parte, k) => {
       const material = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.55, clearcoat: 0.35, clearcoatRoughness: 0.4, sheen: 0.5, sheenColor: '#ffd9dc' });
+      material.userData.interiorCheio = '#a6868b'; // a faixa de substância cinzenta no corte
       grupo.add(marcarParte(new THREE.Mesh(parte, material), chavesLobos[k]));
     });
     grupo.add(marcarParte(new THREE.Mesh(miolo, materialMiolo), 'substancia_branca'));
   }
 
-  // cerebelo e tronco encefálico
-  grupo.add(marcarParte(new THREE.Mesh(criarCerebelo(ruido), new THREE.MeshPhysicalMaterial({ color: '#bd8f93', roughness: 0.6, clearcoat: 0.25 })), 'cerebelo'));
+  // cerebelo: casca com as folhas e, dentro, a "árvore da vida" (substância branca ramificada)
+  const materialCerebelo = new THREE.MeshPhysicalMaterial({ color: '#bd8f93', roughness: 0.6, clearcoat: 0.25 });
+  materialCerebelo.userData.interiorCheio = '#9d7f88';
+  grupo.add(marcarParte(new THREE.Mesh(criarCerebelo(ruido), materialCerebelo), 'cerebelo'));
+  const materialArvore = standard('#f1e9dc', 0.6);
+  materialArvore.userData.interiorCheio = true;
+  grupo.add(marcarParte(new THREE.Mesh(arvoreDaVida(), materialArvore), 'cerebelo'));
   const eixoTronco = new THREE.CatmullRomCurve3([V(0.12, -0.2, 0), V(0.2, -0.6, 0), V(0.32, -1.0, 0), V(0.42, -1.5, 0)]);
   const tronco = tuboDeRaioVariavel(eixoTronco, {
     raio: (u) => 0.85 * (0.16 + 0.055 * Math.exp(-(((u - 0.35) / 0.13) ** 2)) - 0.045 * u) * (u > 0.95 ? Math.sqrt(Math.max(0, 1 - ((u - 0.95) / 0.05) ** 2)) : 1),
     segmentos: 60, lados: 24,
   });
-  grupo.add(marcarParte(new THREE.Mesh(tronco.geometria, standard('#d4b4a0', 0.6)), 'tronco_encefalico'));
+  const materialTronco = standard('#d4b4a0', 0.6);
+  materialTronco.userData.interiorCheio = '#e2cbb8';
+  grupo.add(marcarParte(new THREE.Mesh(tronco.geometria, materialTronco), 'tronco_encefalico'));
 
-  // estruturas profundas (aparecem no corte)
+  // estruturas profundas (aparecem no corte). Todas com interior cheio: cortadas, viram manchas de cor.
+  const cheio = (cor, rugosidade = 0.55, corInterior = true) => {
+    const material = standard(cor, rugosidade);
+    material.userData.interiorCheio = corInterior;
+    return material;
+  };
   const arco = (pontos, raio, achatar = 1) => {
     const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pontos), 60, raio, 12);
     if (achatar !== 1) geo.scale(1, 1, achatar);
     return geo;
   };
-  grupo.add(marcarParte(new THREE.Mesh(arco([V(-0.7, -0.02, 0), V(-0.62, 0.12, 0), V(-0.35, 0.24, 0), V(0, 0.28, 0), V(0.35, 0.22, 0), V(0.62, 0.05, 0), V(0.68, -0.12, 0)], 0.07, 5.5), standard('#f4efe6', 0.55)), 'corpo_caloso'));
-  const materialLiquor = translucido('#8fc5e0', 0.7);
-  const materialTalamo = standard('#c68f95', 0.55);
-  const materialHipocampo = standard('#c28e5d', 0.55);
+  const elipsoide = (escala, posicao, material, chave) => {
+    const malha = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), material);
+    malha.scale.set(...escala);
+    malha.position.set(...posicao);
+    grupo.add(marcarParte(malha, chave));
+    return malha;
+  };
+
+  // corpo caloso: arco largo de fibras brancas que cruza de um hemisfério ao outro
+  grupo.add(marcarParte(new THREE.Mesh(arco([V(-0.7, -0.02, 0), V(-0.62, 0.12, 0), V(-0.35, 0.24, 0), V(0, 0.28, 0), V(0.35, 0.22, 0), V(0.62, 0.05, 0), V(0.68, -0.12, 0)], 0.07, 5.5), cheio('#f4efe6')), 'corpo_caloso'));
+
+  // ventrículos: os laterais em C (corno frontal, corpo, átrio e corno temporal), o terceiro entre os
+  // tálamos e o quarto entre o tronco e o cerebelo
+  const materialLiquor = cheio('#78b4d8', 0.3, '#8cc4e6');
+  const materialCinzento = cheio('#9b8597');
+  const materialPalido = cheio('#bfaabd');
+  const materialTalamo = cheio('#b48c9a');
+  const materialHipocampo = cheio('#c28e5d');
+  const materialFornix = cheio('#efe6d6');
   for (const lado of [-1, 1]) {
     const z = (valor) => lado * valor;
-    grupo.add(marcarParte(new THREE.Mesh(arco([V(-0.55, 0.05, z(0.3)), V(-0.3, 0.2, z(0.3)), V(0.1, 0.24, z(0.3)), V(0.45, 0.12, z(0.3)), V(0.62, -0.1, z(0.32)), V(0.5, -0.33, z(0.36)), V(0.2, -0.42, z(0.38))], 0.05), materialLiquor), 'ventriculos'));
-    const talamo = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), materialTalamo);
-    talamo.scale.set(0.2, 0.15, 0.13);
-    talamo.position.set(0.05, -0.08, z(0.27));
-    grupo.add(marcarParte(talamo, 'talamo'));
-    grupo.add(marcarParte(new THREE.Mesh(arco([V(-0.02, -0.42, z(0.42)), V(0.22, -0.5, z(0.44)), V(0.45, -0.42, z(0.44)), V(0.55, -0.22, z(0.4))], 0.045), materialHipocampo), 'hipocampo'));
+    const caminhoVentriculo = [V(-0.58, 0.06, z(0.17)), V(-0.35, 0.17, z(0.18)), V(0.0, 0.2, z(0.19)), V(0.35, 0.13, z(0.22)), V(0.5, -0.02, z(0.28)), V(0.45, -0.22, z(0.34)), V(0.25, -0.36, z(0.37)), V(0.04, -0.4, z(0.38))];
+    grupo.add(marcarParte(new THREE.Mesh(arco(caminhoVentriculo, 0.05), materialLiquor), 'ventriculos'));
+    // corno occipital: um pequeno prolongamento para trás, a partir do átrio
+    grupo.add(marcarParte(new THREE.Mesh(arco([V(0.45, 0.06, z(0.25)), V(0.62, 0.04, z(0.24)), V(0.76, 0.0, z(0.22))], 0.032), materialLiquor), 'ventriculos'));
+
+    // núcleo caudado: acompanha a parede do ventrículo, com a cabeça grossa na frente e a cauda fina
+    const caudado = tuboDeRaioVariavel(new THREE.CatmullRomCurve3(caminhoVentriculo.map((p) => p.clone().add(V(0.02, -0.03, z(0.08))))), {
+      raio: (u) => 0.016 + 0.07 * (1 - u) ** 1.6, segmentos: 60, lados: 14,
+    });
+    grupo.add(marcarParte(new THREE.Mesh(caudado.geometria, materialCinzento), 'nucleos_da_base'));
+    // núcleo lentiforme: putâmen (por fora) e globo pálido (por dentro), separados do tálamo pela cápsula interna
+    elipsoide([0.26, 0.19, 0.07], [-0.06, -0.06, z(0.46)], materialCinzento, 'nucleos_da_base');
+    elipsoide([0.15, 0.13, 0.05], [-0.03, -0.09, z(0.36)], materialPalido, 'nucleos_da_base');
+    // tálamo: junto à linha média, aparece pela janela da face medial
+    elipsoide([0.19, 0.14, 0.11], [0.12, -0.1, z(0.13)], materialTalamo, 'talamo');
+    // hipocampo no assoalho do corno temporal, e o fórnix, que sai dele, sobe sob o corpo caloso e desce na frente do tálamo
+    grupo.add(marcarParte(new THREE.Mesh(arco([V(0.02, -0.46, z(0.39)), V(0.24, -0.5, z(0.41)), V(0.44, -0.4, z(0.4)), V(0.52, -0.24, z(0.36))], 0.045), materialHipocampo), 'hipocampo'));
+    grupo.add(marcarParte(new THREE.Mesh(arco([V(0.52, -0.24, z(0.34)), V(0.45, 0.04, z(0.18)), V(0.15, 0.13, z(0.06)), V(-0.14, 0.03, z(0.04)), V(-0.12, -0.24, z(0.05))], 0.02), materialFornix), 'hipocampo'));
   }
+  elipsoide([0.18, 0.11, 0.02], [0.1, -0.13, 0], materialLiquor, 'ventriculos'); // terceiro ventrículo, entre os tálamos
+  elipsoide([0.11, 0.13, 0.06], [0.46, -0.6, 0], materialLiquor, 'ventriculos').rotation.z = 0.5; // quarto ventrículo
 
   // artérias: polígono de Willis na base e artéria cerebral média em cada lado. A cerebral média
   // acompanha a superfície: cada ponto vem de um raio lançado contra a malha do hemisfério.

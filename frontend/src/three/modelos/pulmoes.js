@@ -6,7 +6,7 @@ import { criarAleatorio, deformarComRuido, cilindroEntre, esferasInstanciadas, m
  * Formata uma esfera unitária no formato de um pulmão.
  * lado = -1 (pulmão direito do paciente, à esquerda da tela) ou +1 (esquerdo).
  */
-function geometriaPulmao(lado, semente) {
+function geometriaPulmao(lado, semente, cor) {
   const geo = new THREE.SphereGeometry(1, 96, 72);
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
@@ -27,7 +27,32 @@ function geometriaPulmao(lado, semente) {
     v.z *= 0.7;
     pos.setXYZ(i, v.x, v.y, v.z);
   }
-  return deformarComRuido(geo, { amplitude: 0.035, frequencia: 1.8, semente });
+  const forma = deformarComRuido(geo, { amplitude: 0.035, frequencia: 1.8, semente });
+
+  // Fissuras: sulcos fundos que separam os lobos. A oblíqua (nos dois pulmões) desce de trás e do alto
+  // para a frente e para baixo; a horizontal (só no direito) separa o lobo superior do médio.
+  // Cada lobo ganha um tom levemente diferente, e a linha da fissura fica mais escura.
+  const p = forma.attributes.position;
+  const n = forma.attributes.normal;
+  const cores = new Float32Array(p.count * 3);
+  const base = new THREE.Color(cor);
+  const tons = { superior: base.clone().offsetHSL(0, 0, 0.05), medio: base.clone().offsetHSL(0.04, 0.05, 0.02), inferior: base.clone().offsetHSL(-0.04, -0.05, -0.02) };
+  const c = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i);
+    const z = p.getZ(i);
+    const obliqua = (y + 0.02 + 0.82 * z) / 1.29; // distância (no plano y-z) até a fissura oblíqua
+    const horizontal = lado < 0 && obliqua > 0 && z > -0.15 ? y - 0.28 : Infinity; // só no pulmão direito
+    const fissura = Math.exp(-((obliqua / 0.04) ** 2)) + Math.exp(-((horizontal / 0.04) ** 2));
+    const fundura = 0.1 * Math.min(fissura, 1);
+    p.setXYZ(i, p.getX(i) - n.getX(i) * fundura, y - n.getY(i) * fundura, z - n.getZ(i) * fundura);
+    const lobo = obliqua < 0 ? 'inferior' : horizontal < 0 ? 'medio' : 'superior';
+    c.copy(tons[lobo]).multiplyScalar(1 - 0.5 * Math.min(fissura, 1));
+    cores.set([c.r, c.g, c.b], i * 3);
+  }
+  forma.setAttribute('color', new THREE.BufferAttribute(cores, 3));
+  forma.computeVertexNormals();
+  return forma;
 }
 
 /**
@@ -87,11 +112,12 @@ export function criarPulmoes(params, cores) {
   // Material semitransparente: permite ver a árvore brônquica por dentro
   const materialPulmao = () =>
     new THREE.MeshPhysicalMaterial({
-      color: corPulmao, roughness: 0.55, sheen: 1, sheenColor: '#ffd6dc',
+      vertexColors: true, roughness: 0.55, sheen: 1, sheenColor: '#ffd6dc',
       transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide,
+      userData: { interiorCheio: '#e8a3ae' }, // cortado, o tecido aparece cheio (rosa esponjoso)
     });
-  const materialVia = new THREE.MeshPhysicalMaterial({ color: corCartilagem, roughness: 0.4, clearcoat: 0.6 });
-  const materialVaso = (cor) => new THREE.MeshPhysicalMaterial({ color: cor, roughness: 0.4, clearcoat: 0.5 });
+  const materialVia = new THREE.MeshPhysicalMaterial({ color: corCartilagem, roughness: 0.4, clearcoat: 0.6, userData: { interiorCheio: true } });
+  const materialVaso = (cor) => new THREE.MeshPhysicalMaterial({ color: cor, roughness: 0.4, clearcoat: 0.5, userData: { interiorCheio: true } });
 
   // Traqueia com anéis de cartilagem em "C" (TorusGeometry com arco incompleto)
   const traqueia = new THREE.Group();
@@ -115,7 +141,7 @@ export function criarPulmoes(params, cores) {
     const centro = new THREE.Vector3(lado * 0.78, 0, 0);
     const escalaLado = lado < 0 ? 1.05 : 1; // o direito é um pouco maior
 
-    const pulmao = new THREE.Mesh(geometriaPulmao(lado, semente + lado), materialPulmao());
+    const pulmao = new THREE.Mesh(geometriaPulmao(lado, semente + lado, corPulmao), materialPulmao());
     pulmao.position.copy(centro);
     pulmao.scale.setScalar(escalaLado);
     pulmao.renderOrder = 2;

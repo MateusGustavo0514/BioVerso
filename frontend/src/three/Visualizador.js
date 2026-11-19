@@ -16,13 +16,21 @@ const AFASTAMENTO_PECAS = 1.12;
 const INCLINACAO_PECAS = 0.3;
 const VELOCIDADE_GIRO_PECA = 0.009; // radianos por pixel arrastado
 
-/** Injeta GLSL no material padrão: as faces internas reveladas pelo corte ficam mais escuras. */
+/**
+ * Injeta GLSL no material padrão: as faces internas reveladas pelo corte ficam mais escuras.
+ * Com `material.userData.interiorCheio` (true ou uma cor), o lado de dentro de uma peça maciça é
+ * pintado com uma cor chapada, sem luz: cortada, a peça parece cheia de tecido, e não uma casca oca.
+ * `this` é o material (o Three.js chama o gancho como método dele).
+ */
 function escurecerFacesInternas(shader) {
-  shader.fragmentShader = shader.fragmentShader.replace(
-    '#include <opaque_fragment>',
-    `#include <opaque_fragment>
-    if (!gl_FrontFacing) gl_FragColor.rgb *= 0.35;`
-  );
+  const cheio = this.userData.interiorCheio;
+  let trecho = 'if (!gl_FrontFacing) gl_FragColor.rgb *= 0.35;';
+  if (cheio) {
+    const cor = cheio === true ? 'diffuseColor.rgb' : `vec3(${new THREE.Color(cheio).toArray().map((v) => v.toFixed(4)).join(', ')})`;
+    trecho = `if (!gl_FrontFacing) gl_FragColor.rgb = ${cor} * 0.85 + totalEmissiveRadiance;`;
+  }
+  shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+    ${trecho}`);
 }
 
 /**
@@ -535,6 +543,8 @@ export class Visualizador {
       if (!mat.userData.manterLado) mat.side = THREE.DoubleSide;
       mat.wireframe = this.aramado;
       mat.onBeforeCompile = escurecerFacesInternas;
+      // o trecho de GLSL muda com `interiorCheio`: cada variante precisa do seu programa compilado
+      mat.customProgramCacheKey = () => `interior:${mat.userData.interiorCheio ?? ''}`;
       mat.needsUpdate = true;
     });
     // pontos com shader próprio entram no corte se o material declarar `userData.recortavel`

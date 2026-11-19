@@ -18,11 +18,28 @@ function perfil(nos) {
   };
 }
 
+// Camadas da parede, de fora para dentro. `fator` = raio relativo; cada faixa entre duas superfícies tem
+// uma cor. Uma superfície mostra por fora a cor da faixa de fora e, cortada, a cor da faixa de dentro:
+// assim a faixa tem a mesma cor de qualquer ângulo, e o corte mostra as camadas como anéis coloridos.
+const LONGITUDINAL = '#c86d62';
+const CIRCULAR = '#a4413e';
+const OBLIQUA = '#bd5f55';
+const SUBMUCOSA = '#f1d7c0';
+const MUCOSA = '#e48d88';
+const CAMADAS = [
+  { fator: 1.0, interior: LONGITUDINAL }, // serosa: por fora, a cor do estômago
+  { fator: 0.955, superficie: LONGITUDINAL, interior: CIRCULAR, chave: 'camada_muscular' },
+  { fator: 0.91, superficie: CIRCULAR, interior: OBLIQUA, chave: 'camada_muscular' },
+  { fator: 0.865, superficie: OBLIQUA, interior: SUBMUCOSA, chave: 'camada_muscular' },
+  { fator: 0.82, superficie: SUBMUCOSA, interior: MUCOSA, chave: 'submucosa' },
+];
+
 /**
- * Estômago: um eixo curvo (fundo → corpo → antro → piloro) e um tubo de raio variável em volta dele.
- * Duas paredes: a camada muscular por fora e a mucosa, virada do avesso, por dentro, com as rugas
- * (dobras longitudinais por ruído) e as fossetas das glândulas gástricas, que só aparecem no corte.
- * O peristaltismo é uma onda de constrição que desce do corpo ao piloro, recalculada a cada quadro.
+ * Estômago: um eixo curvo (fundo → corpo → antro → piloro) e tubos de raio variável em volta dele,
+ * um para cada camada da parede (serosa, três camadas musculares, submucosa e mucosa). A mucosa, por
+ * dentro, tem as rugas e as fossetas das glândulas. As camadas só aparecem no corte, como faixas da
+ * parede. O peristaltismo é uma onda de constrição
+ * que desce do corpo ao piloro, recalculada a cada quadro em todas as camadas.
  */
 export function criarEstomago(params, cores) {
   const { ondasPorMinuto = 3, semente = 8, fossetas = 1300 } = params;
@@ -53,42 +70,47 @@ export function criarEstomago(params, cores) {
     return 1 - forca * Math.exp(-((u - posicao) ** 2) / (2 * 0.045 ** 2)) * suave(0.25, 0.4, u);
   };
 
-  const ESPESSURA_PAREDE = 0.8; // raio interno da mucosa em relação ao externo
-  // rugas: dobras que correm no sentido do comprimento, mais altas no corpo do que no fundo e no piloro
+  // rugas: dobras longitudinais da mucosa, que avançam para dentro da cavidade
+  const RAIO_MUCOSA = 0.79;
   const rugas = (u, angulo) => {
     const n = ruido(Math.cos(angulo) * 1.2, Math.sin(angulo) * 1.2, u * 3.5);
     const dobra = 0.5 + 0.5 * Math.cos(7 * angulo + 3.2 * n);
-    return 1 + 0.2 * dobra * suave(0.12, 0.3, u) * (1 - suave(0.82, 0.96, u));
+    return 1 - 0.16 * dobra * suave(0.12, 0.3, u) * (1 - suave(0.82, 0.96, u));
   };
 
-  const externo = tuboDeRaioVariavel(eixo, {
-    raio: (u, t) => raioBase(u) * onda(u, t),
-    segmentos: 110, lados: 40,
-  });
-  const interno = tuboDeRaioVariavel(eixo, {
-    raio: (u, t) => raioBase(u) * ESPESSURA_PAREDE * onda(u, t),
+  const tubos = CAMADAS.map(({ fator }) => tuboDeRaioVariavel(eixo, { raio: (u, t) => raioBase(u) * fator * onda(u, t), segmentos: 110, lados: 48 }));
+  const mucosa = tuboDeRaioVariavel(eixo, {
+    raio: (u, t) => raioBase(u) * RAIO_MUCOSA * onda(u, t),
     modulacao: (u, a) => rugas(u, a),
-    segmentos: 110, lados: 40, paraDentro: true,
+    segmentos: 110, lados: 48, paraDentro: true,
   });
 
-  const materialParede = () =>
-    new THREE.MeshPhysicalMaterial({ color: cores.primaria, roughness: 0.48, clearcoat: 0.4, clearcoatRoughness: 0.4, sheen: 0.5, sheenColor: '#ffc9bf' });
-  // revestimento interno: só a face de dentro aparece (malha do avesso), como as cavidades do coração
-  const materialMucosa = new THREE.MeshStandardMaterial({ color: new THREE.Color(cores.secundaria).offsetHSL(0, 0.12, -0.1), roughness: 0.62, side: THREE.FrontSide });
-  materialMucosa.userData.manterLado = true;
 
-  // a parede externa é fatiada em trechos clicáveis que dividem os mesmos vértices (sem emenda)
-  const [geoFundo, geoCorpo, geoAntro, geoPiloro] = fatiarTubo(externo, [0, 0.22, 0.62, 0.92, 1]);
+  const material = (opcoes, interior) => {
+    const m = new THREE.MeshPhysicalMaterial({ roughness: 0.55, clearcoat: 0.3, clearcoatRoughness: 0.45, ...opcoes });
+    m.userData.interiorCheio = interior;
+    return m;
+  };
+
+  // serosa (camada de fora), fatiada em trechos clicáveis que dividem os mesmos vértices
+  const [geoFundo, geoCorpo, geoAntro, geoPiloro] = fatiarTubo(tubos[0], [0, 0.22, 0.62, 0.92, 1]);
   const trechos = [['fundo', geoFundo], ['corpo', geoCorpo], ['antro', geoAntro], ['piloro', geoPiloro]];
-  for (const [chave, geo] of trechos) grupo.add(marcarParte(new THREE.Mesh(geo, materialParede()), chave));
-  grupo.add(marcarParte(new THREE.Mesh(interno.geometria, materialMucosa), 'mucosa'));
+  for (const [chave, geo] of trechos) {
+    grupo.add(marcarParte(new THREE.Mesh(geo, material({ color: cores.primaria, sheen: 0.5, sheenColor: '#ffc9bf' }, CAMADAS[0].interior)), chave));
+  }
+  // camadas de dentro (musculares e submucosa): só aparecem no corte, como faixas da parede
+  CAMADAS.slice(1).forEach((camada, k) => {
+    const tubo = tubos[k + 1];
+    grupo.add(marcarParte(new THREE.Mesh(tubo.geometria, material({ color: camada.superficie }, camada.interior)), camada.chave));
+  });
+  // mucosa: vista de dentro (cavidade) ou cortada, sempre na cor da mucosa
+  const materialMucosa = material({ color: new THREE.Color(cores.secundaria).offsetHSL(0, 0.12, -0.1), roughness: 0.62, clearcoat: 0 }, MUCOSA);
+  grupo.add(marcarParte(new THREE.Mesh(mucosa.geometria, materialMucosa), 'mucosa'));
 
   // anel muscular do piloro (esfíncter): um toro orientado pela tangente do eixo
-  const tangentePiloro = eixo.getTangentAt(0.95);
-  const anel = new THREE.Mesh(new THREE.TorusGeometry(raioCorpo(0.95) * 1.02, 0.05, 12, 32), materialParede());
+  const anel = new THREE.Mesh(new THREE.TorusGeometry(raioCorpo(0.95) * 0.9, 0.06, 14, 36), material({ color: CIRCULAR }, CIRCULAR));
   anel.position.copy(eixo.getPointAt(0.95));
-  anel.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangentePiloro);
-  anel.material.color.multiplyScalar(0.8);
+  anel.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), eixo.getTangentAt(0.95));
   grupo.add(marcarParte(anel, 'piloro'));
 
   // fossetas gástricas: pontos escuros na mucosa (cada esfera representa muitas glândulas)
@@ -97,7 +119,7 @@ export function criarEstomago(params, cores) {
   for (let i = 0; i < fossetas; i++) {
     const u = 0.17 + aleatorio() * 0.72;
     const a = aleatorio() * Math.PI * 2;
-    pontos.push(interno.pontoNaSecao(u, a, ESPESSURA_PAREDE * rugas(u, a) * 0.995, p).clone());
+    pontos.push(mucosa.pontoNaSecao(u, a, RAIO_MUCOSA * rugas(u, a) * 0.995, p).clone());
   }
   const fossetasMalha = new THREE.InstancedMesh(
     new THREE.SphereGeometry(0.013, 8, 6),
@@ -105,40 +127,26 @@ export function criarEstomago(params, cores) {
     pontos.length
   );
   const m = new THREE.Matrix4();
-  pontos.forEach((ponto, i) => fossetasMalha.setMatrixAt(i, m.makeScale(1, 1, 1).setPosition(ponto)));
+  pontos.forEach((ponto, i) => fossetasMalha.setMatrixAt(i, m.makeTranslation(ponto.x, ponto.y, ponto.z)));
   grupo.add(marcarParte(fossetasMalha, 'glandulas_gastricas'));
 
-  // esôfago: desce até a cárdia, na curvatura menor
-  const caminhoEsofago = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-0.05, 1.8, 0),
-    new THREE.Vector3(0.0, 1.35, 0.02),
-    new THREE.Vector3(0.12, 1.0, 0.03),
-    new THREE.Vector3(0.3, 0.7, 0.02),
-  ]);
-  const esofago = new THREE.Mesh(
-    new THREE.TubeGeometry(caminhoEsofago, 40, 0.115, 20),
-    new THREE.MeshPhysicalMaterial({ color: new THREE.Color(cores.primaria).offsetHSL(0.0, -0.05, -0.05), roughness: 0.5, clearcoat: 0.3 })
-  );
-  grupo.add(marcarParte(esofago, 'esofago'));
-
+  // esôfago e duodeno: tubos fechados; cortados, mostram a parede cheia
+  const tuboSimples = (pontos, raio, cor, chave) => {
+    const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pontos), 60, raio, 20);
+    grupo.add(marcarParte(new THREE.Mesh(geo, material({ color: cor }, true)), chave));
+  };
+  tuboSimples([
+    new THREE.Vector3(-0.05, 1.8, 0), new THREE.Vector3(0.0, 1.35, 0.02), new THREE.Vector3(0.12, 1.0, 0.03), new THREE.Vector3(0.3, 0.7, 0.02),
+  ], 0.115, new THREE.Color(cores.primaria).offsetHSL(0.0, -0.05, -0.05), 'esofago');
   // duodeno: primeiro trecho do intestino, em C em volta da cabeça do pâncreas
-  const caminhoDuodeno = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-1.1, -0.55, 0),
-    new THREE.Vector3(-1.45, -0.55, 0.04),
-    new THREE.Vector3(-1.72, -0.28, 0.08),
-    new THREE.Vector3(-1.78, 0.12, 0.08),
-    new THREE.Vector3(-1.58, 0.4, 0.04),
-    new THREE.Vector3(-1.3, 0.46, 0),
-  ]);
-  const duodeno = new THREE.Mesh(
-    new THREE.TubeGeometry(caminhoDuodeno, 60, 0.13, 20),
-    new THREE.MeshPhysicalMaterial({ color: new THREE.Color(cores.primaria).offsetHSL(0.03, 0, -0.1), roughness: 0.5, clearcoat: 0.3 })
-  );
-  grupo.add(marcarParte(duodeno, 'duodeno'));
+  tuboSimples([
+    new THREE.Vector3(-1.1, -0.55, 0), new THREE.Vector3(-1.45, -0.55, 0.04), new THREE.Vector3(-1.72, -0.28, 0.08),
+    new THREE.Vector3(-1.78, 0.12, 0.08), new THREE.Vector3(-1.58, 0.4, 0.04), new THREE.Vector3(-1.3, 0.46, 0),
+  ], 0.13, new THREE.Color(cores.primaria).offsetHSL(0.03, 0, -0.1), 'duodeno');
 
   function atualizar(t) {
-    externo.atualizar(t);
-    interno.atualizar(t);
+    tubos.forEach((tubo) => tubo.atualizar(t));
+    mucosa.atualizar(t);
   }
 
   return { objeto: grupo, atualizar };
